@@ -1,0 +1,766 @@
+---
+title: "Eighth Week: Text Analysis in R"
+subtitle: "To be, or not to be"
+author: "مهسا خوش نما 93101481"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F)
+options(width = 80)
+```
+<div align="center">
+<img  src="images/dickens1_1.png"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با استفاده از بسته gutenberg داده های لازم را به دست آورید و به سوالات زیر پاسخ دهید.
+</p>
+
+```{r}
+library(tm)
+library(wordcloud)
+library(stringr)
+library(highcharter)
+library(tidytext)
+library(ggplot2)
+library(highcharter)
+library(dplyr)
+library(gutenbergr)
+library(wordcloud2)
+library(car)
+library(tidyr)
+```
+
+***
+
+<p dir="RTL">
+۱. چارلز دیکنز نویسنده معروف انگلیسی بالغ بر چهارده رمان (چهارده و نیم) نوشته است. متن تمامی کتاب های او را دانلود کنید و سپس بیست لغت برتر استفاده شده را به صورت یک نمودار ستونی نمایش دهید. (طبیعتا باید ابتدا متن را پاکسازی کرده و stopping words را حذف نمایید تا به کلماتی که بار معنایی مشخصی منتقل می کنند برسید.)
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir = "RTL",>
+چند نکته قابل توجه است: برای حذف کلمه های زائدی که علائم نگارشی دارند، علائم نگارشی را از stopping words حذف کده و چک می کنیم که کلمات انتخابی از بین آن ها نباشند. همچنین برای شمارش تکرار کلمات، کلمات خاص و عام را پیدا کرده و کلمات عام را همگی به حروف کوچک تبدیل می کنیم.
+</p>
+
+```{r fig1, fig.height = 8, fig.width = 16, fig.align = "center"}
+ThePickwickPapers = gutenberg_download(580)
+OliverTwist = gutenberg_download(730)
+NicholasNickleby = gutenberg_download(967)
+TheOldCuriosityShop = gutenberg_download(700)
+BarnabyRudge = gutenberg_download(917)
+MartinChuzzlewit = gutenberg_download(968)
+DombeyandSon = gutenberg_download(821)
+DavidCopperfield =gutenberg_download(766)
+BleakHouse =gutenberg_download(1023)
+HardTimes =gutenberg_download(786)
+LittleDorrit =gutenberg_download(963)
+ATaleOfTwoCities = gutenberg_download(98)
+GreatExpectations = gutenberg_download(1400)
+OurMutualFriend = gutenberg_download(883)
+TheMysteryofEdwinDrood =gutenberg_download(564)
+
+
+novel_texts = c(ThePickwickPapers$text,OliverTwist$text,NicholasNickleby$text,
+                TheOldCuriosityShop$text,BarnabyRudge$text,MartinChuzzlewit$text,
+                DombeyandSon$text,DavidCopperfield$text,BleakHouse$text,
+                HardTimes$text,LittleDorrit$text,ATaleOfTwoCities$text,
+                GreatExpectations$text,OurMutualFriend$text,TheMysteryofEdwinDrood$text)
+
+words = data.frame(word = novel_texts %>% str_split("\\s+") %>% unlist(),
+                   stringsAsFactors = F)
+  
+words %>%  
+  filter(!(str_to_lower(word) %>% str_replace_all("[:punct:]","") %in% 
+             (stop_words$word %>% str_replace_all("[:punct:]","")))) %>% 
+  filter(!(str_to_lower(word) %in% (stop_words$word %>% str_replace_all("[:punct:]","")))) -> words
+words$word =  str_replace_all(words$word,"[:punct:]","") 
+words %>%   filter(!(str_to_lower(word) %in% stop_words$word)) %>% 
+  filter(str_length(word)>1) %>% 
+  filter(!str_detect(word,"\\d")) %>%   
+  mutate(proper = !(str_to_lower(word) %in% word )) ->words
+
+words$word[which(words$proper==0)] = str_to_lower(words$word[which(words$proper==0)])
+words %>% group_by(word,proper) %>% 
+  summarise(count = as.numeric(n())) %>%  arrange(-count)-> words
+words = data.frame(word = words$word,count = words$count,proper = words$proper)
+
+hchart(words[1:20,],type = "column",hcaes(x = word, y =count,color = count),
+       name = "count") %>%  hc_add_theme(hc_theme_google())
+
+
+```
+
+***
+
+<p dir="RTL">
+۲. ابر لغات ۲۰۰ کلمه پرتکرار در رمان های چارلز دیکنز را رسم نمایید. این کار را با بسته wordcloud2 انجام دهید. برای دانلود می توانید به لینک زیر مراجعه کنید.
+</p>
+
+https://github.com/Lchiffon/wordcloud2
+
+<p dir="RTL">
+ با استفاده از عکسی که در ابتدا متن آمده ابر لغاتی مانند شکل زیر رسم کنید. (راهنمایی: از ورودی figpath در دستور wordcloud2 استفاده نمایید.مثالی در زیر آورده شده است.)
+</p>
+
+<div align="center">
+<img  src="images/tag-word-cloud-Che-Guevara.jpg"  align = 'center'>
+</div>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r ,eval=FALSE}
+wordcloud2(words %>% select(word,count) %>% .[1:200,],size = 0.2,color = 'black',
+           figPath = "F:/University/8th Semester/Data Analysis/HWs/hw_08/images/dickens1_1.png")
+
+```
+
+<div align="center">
+<img  src="images/dickens-cloud.png"  align = 'center'>
+</div>
+***
+
+<p dir="RTL">
+۳. اسم پنج شخصیت اصلی در هر رمان دیکنز را استخراج کنید و با نموداری تعداد دفعات تکرار شده بر حسب رمان را رسم نمایید. (مانند مثال کلاس در رسم اسامی شخصیت ها در سری هر پاتر)
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+```{r fig2, fig.height = 8, fig.width = 16, fig.align = "center"}
+###Q3
+novels = list(ThePickwickPapers,OliverTwist,NicholasNickleby,
+                TheOldCuriosityShop,BarnabyRudge,MartinChuzzlewit,
+                DombeyandSon,DavidCopperfield,BleakHouse,
+                HardTimes,LittleDorrit,ATaleOfTwoCities,
+                GreatExpectations,OurMutualFriend,TheMysteryofEdwinDrood)
+
+names = list()
+
+
+for (i in 1:15){
+  book = novels[[i]]
+  words = data.frame(word = book$text %>% str_split("\\s+") %>% unlist(),
+                     stringsAsFactors = F)
+  words %>%  
+    filter(!(str_to_lower(word) %>% str_replace_all("[:punct:]","") %in% 
+               (stop_words$word %>% str_replace_all("[:punct:]","")))) %>% 
+    filter(!(str_to_lower(word) %in% (stop_words$word %>% str_replace_all("[:punct:]","")))) -> words
+  words$word =  str_replace_all(words$word,"[:punct:]","") 
+  words %>%   filter(!(str_to_lower(word) %in% stop_words$word)) %>% 
+    filter(str_length(word)>1) %>% 
+    filter(!str_detect(word,"\\d")) %>%   
+    filter(!(str_to_lower(word) %in% word )) %>% group_by(word) %>% 
+    summarise(count = as.numeric(n())) %>%  arrange(-count)-> words
+  words = data.frame(name = words$word[1:5],count = words$count[1:5],book_no =rep(i,5))
+  names[[i]] = words[1:5,]
+}
+
+names = bind_rows(names)
+names %>% mutate(book = recode(book_no,"1='ThePickwickPapers';2='OliverTwist';3='NicholasNickleby';
+                4='TheOldCuriosityShop';5='BarnabyRudge';6='MartinChuzzlewit';
+                7='DombeyandSon';8='DavidCopperfield';9='BleakHouse';
+                10='HardTimes';11='LittleDorrit';12='ATaleOfTwoCities';
+                13='GreatExpectations';14='OurMutualFriend';15='TheMysteryofEdwinDrood'")) -> names
+
+
+hchart(names[1:25,],type = 'column',hcaes(x=name,y=count,group=book))%>% 
+  hc_add_theme(hc_theme_google())
+
+
+```
+
+```{r fig3, fig.height = 8, fig.width = 16, fig.align = "center"}
+hchart(names[26:50,],type = 'column',hcaes(x=name,y=count,group=book))%>% 
+  hc_add_theme(hc_theme_google())
+```
+
+```{r fig4, fig.height = 8, fig.width = 16, fig.align = "center"}
+hchart(names[51:75,],type = 'column',hcaes(x=name,y=count,group=book))%>% 
+  hc_add_theme(hc_theme_google())
+```
+
+***
+
+<p dir="RTL">
+۴.  در بسته tidytext داده ایی به نام sentiments وجود دارد که فضای احساسی لغات را مشخص می نماید. با استفاده از این داده نمودار ۲۰ لغت برتر negative و ۲۰ لغت برتر positive را در کنار هم رسم نمایید. با استفاده از این نمودار فضای حاکم بر داستان چگونه ارزیابی می کنید؟ (به طور مثال برای کتاب داستان دو شهر فضای احساسی داستان به ترتیب تکرر در نمودار زیر قابل مشاهده است.)
+</p>
+
+<div align="center">
+<img  src="images/sentiments.png"  align = 'center'>
+</div>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+sentiment_words = sentiments %>% filter(lexicon=="nrc") %>% 
+  filter(sentiment=="positive" | sentiment=="negative") %>% select(word,sentiment)
+sentiment_words2 = sentiments %>% filter(lexicon=="nrc") %>% 
+  filter(sentiment %in% c("trust","anticipation","fear","sadness",
+                          "joy","anger","surprise","disgust")) %>% select(word,sentiment)
+positive = list()
+negative = list()
+senti_words = list()
+for (i in 1:15){
+  book = novels[[i]]
+  words = data.frame(word = book$text %>% str_split("\\s+") %>% unlist(),
+                     stringsAsFactors = F)
+  
+  words$word =  str_replace_all(words$word,"[:punct:]","") 
+  words %>% 
+    filter(str_length(word)>1) %>% 
+    filter(!str_detect(word,"\\d")) %>%   
+    mutate(proper = !(str_to_lower(word) %in% word )) ->words
+  
+  words$word[which(words$proper==0)] = str_to_lower(words$word[which(words$proper==0)])
+  words %>% group_by(word,proper) %>% 
+    summarise(count = as.numeric(n())) %>%  arrange(-count)-> words
+  words = data.frame(word = words$word,count = words$count) %>% mutate(book_no =i)
+  words1 = merge(words,sentiment_words)
+  positive[[i]] = words1 %>% filter(sentiment=="positive") %>% arrange(-count) %>% slice(1:20)
+  negative[[i]] = words1 %>% filter(sentiment=="negative") %>% arrange(-count) %>% slice(1:20)
+  words2 = merge(words,sentiment_words2)
+  senti_words[[i]] = words2 %>% group_by(sentiment,book_no) %>% summarise(count= sum(count)) %>% 
+    arrange(-count)
+}
+
+
+positive = bind_rows(positive)
+positive %>% mutate(book = recode(book_no,"1='\"The Pickwick Papers\"';2='\"Oliver Twist\"';
+                               3='\"NicholasNickleby\"';
+                               4='\"TheOldCuriosityShop\"';5='\"BarnabyRudge\"';6='\"MartinChuzzlewit\"';
+                               7='\"DombeyandSon\"';8='\"DavidCopperfield\"';9='\"BleakHouse\"';
+                               10='\"HardTimes\"';11='\"LittleDorrit\"';12='\"ATaleOfTwoCities\"';
+                               13='\"GreatExpectations\"';14='\"OurMutualFriend\"';
+                                    15='\"TheMysteryofEdwinDrood\"'")) -> positive
+
+negative = bind_rows(negative)
+negative %>% mutate(book = recode(book_no,"1='\"The Pickwick Papers\"';2='\"Oliver Twist\"';
+                               3='\"NicholasNickleby\"';
+                                4='\"TheOldCuriosityShop\"';5='\"BarnabyRudge\"';6='\"MartinChuzzlewit\"';
+                                  7='\"DombeyandSon\"';8='\"DavidCopperfield\"';9='\"BleakHouse\"';
+                                  10='\"HardTimes\"';11='\"LittleDorrit\"';12='\"ATaleOfTwoCities\"';
+                                  13='\"GreatExpectations\"';14='\"OurMutualFriend\"';
+                                  15='\"TheMysteryofEdwinDrood\"'")) -> negative
+
+senti_words = bind_rows(senti_words)
+senti_words %>% mutate(book = recode(book_no,"1='\"The Pickwick Papers\"';2='\"Oliver Twist\"';
+                               3='\"NicholasNickleby\"';
+                                4='\"TheOldCuriosityShop\"';5='\"BarnabyRudge\"';6='\"MartinChuzzlewit\"';
+                                  7='\"DombeyandSon\"';8='\"DavidCopperfield\"';9='\"BleakHouse\"';
+                                  10='\"HardTimes\"';11='\"LittleDorrit\"';12='\"ATaleOfTwoCities\"';
+                                  13='\"GreatExpectations\"';14='\"OurMutualFriend\"';
+                                  15='\"TheMysteryofEdwinDrood\"'")) -> senti_words
+
+senti_words = data.frame(sentiment = senti_words$sentiment,count = senti_words$count,
+                         book = senti_words$book)
+plot_list = list()
+for(i in 1:15){
+  
+  hc = hchart(positive[((i-1)*20+1):(i*20),],type = 'column',color='red', hcaes(x = word,y=count),name='count') %>%
+      hc_title(text = paste(positive$book[i*20],"Positive Words"," "))
+  plot_list[[3*i-2]] = hc
+  hc = hchart(negative[((i-1)*20+1):(i*20),],type = 'column',color='blue', hcaes(x = word,y=count)) %>%
+    hc_title(text = paste(negative$book[i*20],"Negative Words"," "))
+  plot_list[[3*i-1]] = hc
+  hc = hchart(senti_words[((i-1)*8+1):(i*8),],type = 'bar',
+              hcaes(x = sentiment,y=count,color=as.factor(sentiment))) %>%
+    hc_title(text = paste(negative$book[i*20],"Sentiments"," ")) %>% 
+    hc_add_theme(hc_theme_ffx())
+  plot_list[[3*i]] = hc
+}
+
+
+htmltools::tagList(plot_list[1:3])
+
+```
+
+
+<p dir="RTL">
+فضای کتاب، با توجه به تعداد به نسبت بسیار بیشتر کلمات مثبت، مثبت است.
+</p>
+
+```{r}
+htmltools::tagList(plot_list[4:6])
+```
+
+<p dir="RTL">
+تعداد لغات مثبت، به نسبت بیشتر هستندو فضا نسبتا مثبت است. در نمودار سوم گرچه مشاهده می شود که احساستی همچون ترس و ناراحتی هم به نسبت در کتاب زیاد ظاهر شده اند.
+</p>
+
+```{r}
+htmltools::tagList(plot_list[7:9])
+```
+
+<p dir="RTL">
+فضای کتاب، با توجه به تعداد به نسبت بسیار بیشتر کلمات مثبت، مثبت است.
+</p>
+
+```{r}
+htmltools::tagList(plot_list[10:12])
+```
+
+<p dir="RTL">
+فضای کتاب، با توجه به تعداد به نسبت بسیار بیشتر کلمات مثبت، مثبت است.
+</p>
+
+```{r}
+htmltools::tagList(plot_list[13:15])
+```
+
+<p dir="RTL">
+فضای کتاب، با توجه به تعداد به نسبت بسیار بیشتر کلمات مثبت، مثبت است.
+</p>
+
+<p dir="RTL">
+به همین ترتیب با استفاده از نمودارهای زیر می توان به طور نسبی از فضای داستان ها آگاه شد.
+</p>
+
+```{r}
+htmltools::tagList(plot_list[16:45])
+```
+***
+
+<p dir="RTL">
+۵. متن داستان بینوایان را به ۲۰۰ قسمت مساوی تقسیم کنید. برای هر قسمت تعداد لغات positive و negative را حساب کنید و سپس این دو سری زمانی را در کنار هم برای مشاهده فضای احساسی داستان رسم نمایید.
+</p>
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r fig5, fig.height = 8, fig.width = 16, fig.align = "center"}
+gutenberg_metadata %>% filter(str_detect(author,"Hugo")) -> Hugo
+
+LesMiserables = gutenberg_download(135)
+text = LesMiserables$text[-(1:624)]
+
+words = data.frame(word = text %>% str_split("\\s+") %>% unlist(),
+                   stringsAsFactors = F)
+words$section = ceiling(200*(1:nrow(words))/nrow(words))
+words$word =  str_replace_all(words$word,"[:punct:]","") 
+words %>% 
+  filter(str_length(word)>1) %>% 
+  filter(!str_detect(word,"\\d")) %>%   
+  mutate(proper = !(str_to_lower(word) %in% word )) ->words
+
+words$word[which(words$proper==0)] = str_to_lower(words$word[which(words$proper==0)])
+words %>% group_by(word,section) %>% 
+  summarise(count = as.numeric(n())) %>%  arrange(section,-count)-> words
+words = data.frame(word = words$word,section = words$section,count = words$count)
+words = merge(words,sentiment_words)
+words = words %>% group_by(section,sentiment) %>% 
+  summarise(count = sum(count)) 
+w = words %>% group_by(section) %>% summarise(c = sum(count))
+words %>% mutate(normalised_count = 0) -> words
+words$normalised_count[which(words$sentiment=='positive')] = 
+  words$count[which(words$sentiment=='positive')]/w$c
+words$normalised_count[which(words$sentiment=='negative')] = 
+  words$count[which(words$sentiment=='negative')]/w$c
+words %>% 
+  hchart(type = "line", hcaes(x = section, y = normalised_count, group = sentiment)) %>% 
+  hc_legend(align = "right", verticalAlign = "top",
+            layout = "vertical", x = 0, y = 100) %>% hc_add_theme(hc_theme_google())
+
+```
+
+```{r fig6, fig.height = 8, fig.width = 16, fig.align = "center"}
+sections = data.frame(section = (1:200),net_normalised_count = 
+                        words$normalised_count[which(words$sentiment=='positive')] - 
+                        words$normalised_count[which(words$sentiment=='negative')]) %>% 
+  mutate(sense = ifelse(net_normalised_count>0 ,"positive","negative"))
+
+sections %>% 
+  hchart(type = "line", hcaes(x = section, y = net_normalised_count)) %>%
+    hc_add_theme(hc_theme_google())
+```
+
+<p dir="RTL">
+مشاهده می شود که فضای کتاب، به شدت بین مثبت و منفی نوسان می کند. در انتها برای بازه ای فضا منفی شده ولی نهایتا با فضای مثبت به پایان می رسد.
+</p>
+***
+
+<p dir="RTL">
+۶. ابتدا ترکیبات دوتایی کلماتی که پشت سر هم می آیند را استخراج کنید و سپس نمودار ۳۰ جفت لغت پرتکرار را رسم نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+```{r fig7, fig.height = 8, fig.width = 16, fig.align = "center"}
+LesMiserables$text = str_replace_all(LesMiserables$text,"[:punct:]"," ")
+LesMiserables %>% mutate(bigram = "")->bigrams
+unnest_tokens(bigrams,bigram,text , token = "ngrams", n = 2)->bigrams
+
+bigrams = bigrams$bigram %>%
+  table() %>% as.data.frame(stringsAsFactors =F) -> bigrams
+
+colnames(bigrams) = c("bigram","count")
+bigrams %>% filter(!str_detect(bigram,"\\d")) -> bigrams
+bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ") -> bigrams_separated 
+
+bigrams$word1 =  bigrams_separated$word1
+bigrams$word2 =  bigrams_separated$word2
+
+bigrams %>% filter(!(str_to_lower(word1) %in% stopwords('en')) &
+                   !(str_to_lower(word1) %in% stopwords('fr')) &
+                   !(str_to_lower(word2) %in% stopwords('en')) &
+                   !(str_to_lower(word2) %in% stopwords('fr'))) -> bigrams
+
+
+bigrams %>% arrange(-count) %>% slice(1:30) -> bigrams
+hchart(bigrams,type = 'column',hcaes(x = bigram,y=count,color = -count), name='count') %>%
+  hc_add_theme(hc_theme_google()) %>% hc_title(text="Bigrams in \"Les Miserables\"")
+```
+
+***
+
+<p dir="RTL">
+۷. جفت کلماتی که با she و یا he آغاز می شوند را استخراج کنید. بیست فعل پرتکراری که زنان و مردان در داستان های دیکنز انجام می دهند را استخراج کنید و نمودار آن را رسم نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r fig8, fig.height = 8, fig.width = 16, fig.align = "center"}
+LesMiserables %>% mutate(bigram = "")->bigrams
+unnest_tokens(bigrams,bigram,text , token = "ngrams", n = 2)->bigrams
+
+
+bigrams$bigram = bigrams$bigram %>% str_to_lower()
+bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ") -> bigrams_separated 
+
+bigrams$word1 =  bigrams_separated$word1
+bigrams$word2 =  bigrams_separated$word2
+
+bigrams %>% filter(word1=='he'|word1=='she') %>% .$word2 -> verbs
+verbs = verbs %>% 
+  table() %>% as.data.frame(stringsAsFactors =F)
+colnames(verbs) = c("verb","count")
+verbs %>% arrange(-count) -> verbs
+hchart(verbs[1:20,],type = 'column',hcaes(x = verb,y=count,color = -count), name='count') %>%
+  hc_add_theme(hc_theme_google()) %>% hc_title(text="Verbs in \"Les Miserables\"")
+ 
+
+```
+
+```{r, eval=FALSE}
+wordcloud(verbs$verb[1:20],verbs$count[1:20],size=2,
+          c(5,.3), random.order = FALSE, colors=brewer.pal(8, "Dark2"))
+```
+<div align="center">
+<img  src="images/verbs.png"  align = 'center'>
+</div>
+
+***
+
+<p dir="RTL">
+۸. برای کتاب های دیکنز ابتدا هر فصل را جدا کنید. سپی برای هر فصل 
+1-gram, 2-gram
+را استخراج کنید. آیا توزیع  N-gram
+در کارهای دیکنز یکسان است؟ با رسم نمودار هم این موضوع را بررسی کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+```{r fig9, fig.height = 20, fig.width = 16, fig.align = "center"}
+novels = list(ThePickwickPapers,OliverTwist,NicholasNickleby,
+              TheOldCuriosityShop,BarnabyRudge,MartinChuzzlewit,
+              DombeyandSon,DavidCopperfield,BleakHouse,
+              HardTimes,LittleDorrit,ATaleOfTwoCities,
+              GreatExpectations,OurMutualFriend,TheMysteryofEdwinDrood)
+
+ngrams = list()
+
+for (i in 1:15){
+  words = data.frame(word = novels[[i]]$text %>% str_split("\\s+") %>% unlist(),
+                     stringsAsFactors = F)
+  
+  words %>%  
+    filter(!(str_to_lower(word) %>% str_replace_all("[:punct:]","") %in% 
+               (stop_words$word %>% str_replace_all("[:punct:]","")))) %>% 
+    filter(!(str_to_lower(word) %in% (stop_words$word %>% str_replace_all("[:punct:]","")))) -> words
+  words$word =  str_replace_all(words$word,"[:punct:]","") 
+  words %>%   filter(!(str_to_lower(word) %in% stop_words$word)) %>% 
+    filter(str_length(word)>1) %>% 
+    filter(!str_detect(word,"\\d")) %>%   
+    mutate(proper = !(str_to_lower(word) %in% word )) ->words
+  
+  words$word[which(words$proper==0)] = str_to_lower(words$word[which(words$proper==0)])
+  words %>% group_by(word,proper) %>% 
+    summarise(count = as.numeric(n())) %>%  arrange(-count) -> words
+  words = data.frame(word = words$word,count = words$count,
+                     rank = 1:nrow(words)) %>% 
+    mutate(book_no = i, gram = '1-gram')
+  ngrams[[i]] = words
+}
+
+
+dickens_ngrams = bind_rows(ngrams)
+
+
+bigrams_list = list()
+for (i in 1:15){
+  bigrams = novels[[i]]
+  bigrams$text = str_replace_all(bigrams$text,"[:punct:]"," ")
+  bigrams %>% mutate(bigram = "")->bigrams
+  unnest_tokens(bigrams,bigram,text , token = "ngrams", n = 2)->bigrams
+  
+  bigrams = bigrams$bigram %>%
+     as.data.frame(stringsAsFactors =F) -> bigrams
+  
+  colnames(bigrams) = c("bigram")
+  bigrams %>% filter(!str_detect(bigram,"\\d")) -> bigrams
+  bigrams %>%
+    separate(bigram, c("word1", "word2"), sep = " ") -> bigrams_separated 
+  
+  bigrams$word1 =  bigrams_separated$word1
+  bigrams$word2 =  bigrams_separated$word2
+  
+  bigrams %>% filter(!(str_to_lower(word1) %in% stopwords('en')) &
+                       !(str_to_lower(word1) %in% stopwords('fr')) &
+                       !(str_to_lower(word2) %in% stopwords('en')) &
+                       !(str_to_lower(word2) %in% stopwords('fr'))) ->bigrams
+  
+  bigrams = rbind(bigrams$word1,bigrams$word2) %>% unlist() %>%  
+    table() %>% as.data.frame(stringsAsFactors =F)
+  colnames(bigrams) = c('word','count')
+  bigrams %>% arrange(-count) -> bigrams
+  bigrams$rank = 1:nrow(bigrams)
+  bigrams %>% mutate(book_no = i, gram ='2-gram') -> bigrams
+  bigrams_list[[i]] = bigrams
+}
+
+bigrams_list = bind_rows(bigrams_list)
+
+dickens_ngrams = rbind(dickens_ngrams,bigrams_list)
+# ngrams = data.frame(word = ngrams$word,count = as.numeric(ngrams$count),rank=ngrams$rank,
+#                     book_no = ngrams$book_no, gram = ngrams$gram)
+dickens_ngrams %>% mutate(book = recode(book_no,"1='\"The Pickwick Papers\"';2='\"Oliver Twist\"';
+                               3='\"NicholasNickleby\"';
+                                  4='\"TheOldCuriosityShop\"';5='\"BarnabyRudge\"';6='\"MartinChuzzlewit\"';
+                                  7='\"DombeyandSon\"';8='\"DavidCopperfield\"';9='\"BleakHouse\"';
+                                  10='\"HardTimes\"';11='\"LittleDorrit\"';12='\"ATaleOfTwoCities\"';
+                                  13='\"GreatExpectations\"';14='\"OurMutualFriend\"';
+                                  15='\"TheMysteryofEdwinDrood\"'"))-> dickens_ngrams
+
+ggplot(dickens_ngrams)+geom_line( aes(x = log(rank), y = log(count), color = gram),size=1)+facet_wrap(~book)+
+ labs(x="Log(n-gram index)",
+     y="Log(Number of occurrence)")
+
+```
+
+<p dir="RTL"> 
+به نظر می رسد، توزیع n-gram ها در آثار مختلف دیکنز یکسان باشد.
+</p>
+
+<p dir="RTL"> 
+برای بررسی دقیق تر برای توزیع های 1gram و 2gram کتاب ها تست kruskall-wallis انجام می دهیم.
+</p>
+
+```{r}
+#1-gram test
+kruskal.test(count~book_no,data=dickens_ngrams %>% filter(gram=='1-gram'))
+```
+
+```{r}
+#1-gram test
+kruskal.test(count~book_no,data=dickens_ngrams %>% filter(gram=='1-gram'))
+```
+
+<p dir="RTL"> 
+با توجه به مقادیر کوچک p-value نتیجه می گیریم توزیع ngramها برای  کارهای این نویسنده یکسان نیست. 
+</p>
+***
+
+<p dir="RTL"> 
+۹. برای آثار ارنست همینگوی نیز تمرین ۸ را تکرار کنید. آیا بین آثار توزیع n-grams در بین آثار این دو نویسنده یکسان است؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+4اثر موجود از ویرجینیا وولف در کتابخانه ی گوتنبرگ را بررسی می کنیم.
+</p>
+
+```{r  fig10, fig.height = 8, fig.width = 16, fig.align = "center"}
+gutenberg_metadata %>% filter(str_detect(author,"Woolf, Virginia")) -> Woolf
+
+TheVoyageOut = gutenberg_download(144)
+NightAndDay = gutenberg_download(1245)
+JacobsRoom = gutenberg_download(5670)
+MondayOrTuesday = gutenberg_download(22920)
+
+novels = list(TheVoyageOut,NightAndDay,JacobsRoom,
+              MondayOrTuesday)
+
+ngrams = list()
+
+for (i in 1:4){
+  words = data.frame(word = novels[[i]]$text %>% str_split("\\s+") %>% unlist(),
+                     stringsAsFactors = F)
+  
+  words %>%  
+    filter(!(str_to_lower(word) %>% str_replace_all("[:punct:]","") %in% 
+               (stop_words$word %>% str_replace_all("[:punct:]","")))) %>% 
+    filter(!(str_to_lower(word) %in% (stop_words$word %>% str_replace_all("[:punct:]","")))) -> words
+  words$word =  str_replace_all(words$word,"[:punct:]","") 
+  words %>%   filter(!(str_to_lower(word) %in% stop_words$word)) %>% 
+    filter(str_length(word)>1) %>% 
+    filter(!str_detect(word,"\\d")) %>%   
+    mutate(proper = !(str_to_lower(word) %in% word )) ->words
+  
+  words$word[which(words$proper==0)] = str_to_lower(words$word[which(words$proper==0)])
+  words %>% group_by(word,proper) %>% 
+    summarise(count = as.numeric(n())) %>%  arrange(-count) -> words
+  words = data.frame(word = words$word,count = words$count,
+                     rank = 1:nrow(words)) %>% 
+    mutate(book_no = i, gram = '1-gram')
+  ngrams[[i]] = words
+}
+
+
+woolf_ngrams = bind_rows(ngrams)
+
+
+bigrams_list = list()
+for (i in 1:4){
+  bigrams = novels[[i]]
+  bigrams$text = str_replace_all(bigrams$text,"[:punct:]"," ")
+  bigrams %>% mutate(bigram = "")->bigrams
+  unnest_tokens(bigrams,bigram,text , token = "ngrams", n = 2)->bigrams
+  
+  bigrams = bigrams$bigram %>%
+    as.data.frame(stringsAsFactors =F) -> bigrams
+  
+  colnames(bigrams) = c("bigram")
+  bigrams %>% filter(!str_detect(bigram,"\\d")) -> bigrams
+  bigrams %>%
+    separate(bigram, c("word1", "word2"), sep = " ") -> bigrams_separated 
+  
+  bigrams$word1 =  bigrams_separated$word1
+  bigrams$word2 =  bigrams_separated$word2
+  
+  bigrams %>% filter(!(str_to_lower(word1) %in% stopwords('en')) &
+                       !(str_to_lower(word1) %in% stopwords('fr')) &
+                       !(str_to_lower(word2) %in% stopwords('en')) &
+                       !(str_to_lower(word2) %in% stopwords('fr'))) ->bigrams
+  
+  bigrams = rbind(bigrams$word1,bigrams$word2) %>% unlist() %>%  
+    table() %>% as.data.frame(stringsAsFactors =F)
+  colnames(bigrams) = c('word','count')
+  bigrams %>% arrange(-count) -> bigrams
+  bigrams$rank = 1:nrow(bigrams)
+  bigrams %>% mutate(book_no = i, gram ='2-gram') -> bigrams
+  bigrams_list[[i]] = bigrams
+}
+
+bigrams_list = bind_rows(bigrams_list)
+
+woolf_ngrams = rbind(woolf_ngrams,bigrams_list)
+
+woolf_ngrams %>% mutate(book = recode(book_no,"1='\"The Voyage Out\"';2='\"Night and Day\"';
+                                3='\"Jacob\\'s Room\"';4='\"Monday or Tuesday\"'"))-> woolf_ngrams
+
+ggplot(woolf_ngrams)+geom_line( aes(x = log(rank), y = log(count), color = gram),size=1)+facet_wrap(~book)+
+  labs(x="Log(n-gram index)",
+       y="Log(Number of occurrence)")
+```
+
+<p dir="RTL">
+به نظر می رسد توزیع ها برای آثار مختلف وی یکسان باشند به غیر از این که به طور کلی، تعداد کلمات کتاب Monday or Tuesday بیشتر از سه کتاب دیگر است. به طور کلی نمودارهای توزیع n-gram مشابه آثار دیکنز است.
+</p>
+
+<p dir="RTL"> 
+برای بررسی دقیق تر برای توزیع های 1gram و 2gram کتاب ها تست kruskall-wallis انجام می دهیم.
+</p>
+```{r}
+#1-gram test
+kruskal.test(count~book_no,data=woolf_ngrams %>% filter(gram=='1-gram'))
+```
+
+```{r}
+#2-gram test
+kruskal.test(count~book_no,data=woolf_ngrams %>% filter(gram=='2-gram'))
+```
+<p dir="RTL"> 
+با توجه به مقادیر کوچک p-value نتیجه می گیریم توزیع ngramها برای  کارهای این نویسنده یکسان نیست. 
+</p>
+
+<p dir="RTL"> 
+برای مقایسه ی کارهای دو نویسنده،برای توزیع دو تا از کتاب هایشان تست kruskall wallis انجام می دهیم.
+</p>
+
+```{r}
+kruskal.test(dickens_ngrams %>% filter(gram=='1-gram' & book_no==1),
+             woolf_ngrams %>% filter(gram=='1-gram'& book_no==1))
+```
+
+
+```{r}
+kruskal.test(dickens_ngrams %>% filter(gram=='2-gram' & book_no==1),
+             woolf_ngrams %>% filter(gram=='2-gram'& book_no==1))
+```
+
+<p dir="RTL"> 
+مقدار بسیار کوچک p-value نشان می دهد که توزیع ngram ها برای این دو نویسنده یکسان نیست.
+</p>
+***
+
+<p dir="RTL"> 
+۱۰. بر اساس دادهایی که در تمرین ۸ و ۹ از آثار دو نویسنده به دست آوردید و با استفاده از  N-gram ها یک مدل لاجستیک برای تشخیص صاحب اثر بسازید. خطای مدل چقدر است؟ برای یادگیری مدل از کتاب کتاب الیور تویست اثر دیکنز و کتاب پیرمرد و دریا استفاده نکنید. پس از ساختن مدل برای تست کردن فصل های این کتابها را به عنوان داده ورودی به مدل بدهید. خطای تشخیص چقدر است؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+به عنوان ویژگی برای هر کتاب تعداد 20تا بزرگترین فرکانس ها در توزیع 1gram و2gram را انتخاب می کنیم. سپس از کتاب های دیکنز 2 اثر و از کتاب های وولف 1 اثر را برای test و بقیه ی آثار را به عنوان train انتخاب می کنیم.
+</p>
+
+```{r}
+dickens_ngrams %>% filter(rank<=20) %>% arrange(book_no,gram)%>% select(book_no,count) ->data
+data = as.data.frame(matrix(data = data$count,nrow = 15,byrow = T)) 
+data %>% mutate(author = 0) -> data
+
+woolf_ngrams %>% filter(rank<=20) %>% arrange(book_no,gram)%>% select(book_no,count) ->data2
+data2 = as.data.frame(matrix(data = data2$count,nrow = 4,byrow = T)) 
+data2 %>% mutate(author = 1) -> data2
+
+data = rbind(data,data2)
+
+
+library(h2o)
+h2o.init(nthreads = -1, max_mem_size = '2g', ip = "127.0.0.1", port = 50001)
+htrain = as.h2o(data[c(3:15,17:19),])
+chglm = h2o.glm(y = "author", x= colnames(data)[1:40],
+                training_frame = htrain, family="binomial")
+
+chglm
+
+htest = as.h2o(data[c(1,2,16),])
+predict_authors = h2o.predict(chglm, newdata = htest)
+predict_authors
+```
+
+
+<p dir="RTL">
+مدل، روی داده های آموزش جواب خوبی می دهد و دقت 100درصد دارد ولی روی داده های test مناسب عمل نکرده و هر سه کتاب را متعلق به دیکنز تشخیص می دهد. دلیل عملکرد نامناسب مدل، تعداد بسیار کم داده های آموزشی به نسبت تعداد فیچرها و همچنین unbalanced بودن تعداد دیتای آموزشی دو کلاس می تواند باشد.
+</p>

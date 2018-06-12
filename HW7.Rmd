@@ -1,0 +1,558 @@
+---
+title: "Seventh Week: Generalized Linear Models"
+subtitle: "Murder or suicide"
+author: "مهسا خوش نما 93101481"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F)
+options(width = 80)
+```
+<div align="center">
+<img  src="images/giraffe-suicide-fail-cartoon.jpg"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با توجه به سوالات مرگ و میر در آمریکا به سوالات زیر پاسخ دهید.
+</p>
+
+```{r}
+library(readxl)
+library(dplyr)
+library(ggplot2)
+library(Hmisc)
+library(corrplot)
+library(car)
+library(reshape2)
+library(tidytext)
+library(rlist)
+library(gridExtra)
+library(ggthemes)
+library(knitr)
+library(kableExtra)
+source("unbalanced_functions.R")
+data = read.csv("data/murder_suicide.csv")
+```
+
+***
+
+<p dir="RTL">
+۱. از میان متغیرهای داده مرگ و میر یک زیرمجموعه ایی بدون حشو در نظر بگیرید.
+ماتریس همبستگی متغیرهای مختلف را به دست آورده و سپس رسم نمایید. علاوه بر این نمودار پراکنش متغیرهای انتخاب شده را همزمان نسبت به هم رسم نمایید.
+</p>
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir = "RTL">
+ابتدامتغیرهای مربوط به تحصیلات را که بر اساس سال 1989 و 2003 آمده اند را یکسان سازی می کنیم.سپس ویژگی هایی را که به صورت categorical هستند به ویژگی های عددی تبدیل می کنیم. همچنین داده هایی که متغیر سن در آن ها ذکر نشده است(که تعداد بسیار کمی دارند) را حذف کرده و سن همه ی داده ها را یکسان سازی کرده و به سال تبدیل می کنیم. نهایتا از بین ویژگی هایی که اطلاعات مشابهی را می رسانند آن ویژگی که بیشترین اطلاعات را منتقل میکند انتخاب می کنیم. سپس مقدار قدر مطلق correlation دو به دوی این متغیرها را رسم می کنیم و از بین متغیرهایی که با هم correlation زیادی دارند یکی را انتخاب می کنیم تا نهایتا به مجموعه ی نهایی ویژگی ها برسیم.
+</p>
+```{r fig1, fig.height = 8, fig.width = 16, fig.align = "center"}
+#combining educations reported in 2003 and 1989
+rbind(data %>% filter(EducationReportingFlag==1) %>% mutate(Education = Education2003Revision) %>% 
+  select(-EducationReportingFlag,-Education2003Revision,-Education1989Revision),
+  data %>% filter(EducationReportingFlag==0) %>% mutate(Education =
+            recode(Education1989Revision,"0:8= 1;9:11=2;12=3;13:15=4;16=6;17=7;else=9")) %>% 
+  select(-EducationReportingFlag,-Education2003Revision,-Education1989Revision)) -> stat
+
+#numerising the categorical features
+stat %>% select_if(is.factor) %>% data.matrix %>% as.numeric() %>% 
+  matrix(nrow = nrow(stat)) %>% data.frame -> stat2
+colnames(stat2) = stat %>% select_if(is.factor) %>% colnames()
+cbind(stat %>% select_if(is.numeric), 
+      stat2)->stat
+
+
+#Adjusting the age
+stat %>% group_by(AgeType) %>% summarise(n())
+stat %>% filter(AgeType!=9) -> stat
+
+
+stat %>% select(-Id,-AgeType,-AgeRecode52,-AgeRecode27,-AgeRecode12,-AgeSubstitutionFlag,
+                -InfantAgeRecode22,-InfantCauseRecode130,-CauseRecode113,-CauseRecode39,-RaceImputationFlag,
+                -RaceRecode3,-RaceRecode5,-BridgedRaceFlag,-HispanicOrigin,-HispanicOriginRaceRecode,
+                -MannerOfDeath,-CurrentDataYear,-NumberOfEntityAxisConditions,
+                -NumberOfRecordAxisConditions) %>% 
+        mutate(label = recode(stat$MannerOfDeath,"2=0;3=1")) -> train  #0:suicide 1:homicide
+corr = rcorr(as.matrix(train %>% select(-label)))
+corr_matrix = corr[[1]]
+melted_cormat <- melt(abs(corr_matrix))
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  scale_fill_gradientn(colours = c("azure","slateblue1","red"), values = c(0,0.5,1))
+
+train %>% select(-Icd10Code,-ActivityCode,-InjuryAtWork,-InjuryAtWork,-Autopsy) -> train
+
+corr = rcorr(as.matrix(train %>% select(-label)))
+corr_matrix = corr[[1]]
+melted_cormat <- melt(abs(corr_matrix))
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  scale_fill_gradientn(colours = c("azure","slateblue1","red"), values = c(0,0.5,1))
+```
+
+<p dir="RTL">
+نهایتا 12 ویژگی انتخاب می شوند که نمودار correlation و پراکنش دو به دوی آن ها به صورت زیر است:
+</p>
+
+```{r fig2, fig.height = 8, fig.width = 16, fig.align = "center"}
+corr = rcorr(as.matrix(train %>% select(-label)))
+corr_matrix = corr[[1]]
+melted_cormat <- melt(abs(corr_matrix))
+kable(corr_matrix) %>%  kable_styling() %>%
+  scroll_box(width = "900px", height = "600px")
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  scale_fill_gradientn(colours = c("azure","slateblue1","red"), values = c(0,0.5,1))
+```
+
+
+```{r fig3, fig.height = 300, fig.width = 16, fig.align = "center"}
+plots = list()
+vars = colnames(train)[-13]
+for (i in 2:12){
+  for(j in 1:(i-1)){
+  p = ggplot(data = train,aes(x=train %>% select(vars[i]), y=train %>% select(vars[j])))+
+    ylab(vars[j])+xlab(vars[i])+geom_point(aes(size = train %>% select(vars[i]))) +
+    theme(legend.position = "none") +
+    geom_smooth(method="lm", formula=y~x, colour = "blue") 
+  plots = list.append(plots,p)
+  }
+}
+do.call(grid.arrange,c(plots,ncol = 2))
+```
+
+***
+
+<p dir="RTL">
+۲. اثر هر یک از متغیرهای جنسیت، نژاد،آموزش، سن و نحوه تدفین را بر مرگ یا خودکشی ارزیابی کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir = "RTL">
+برای بررسی تاثیر هر یک از متغیرهای فوق، از Chi-Squared Test of Independence استفاده می کنیم. مشاهده می شود که p-value برای همه ی متغیرهای ذکر شده significant است و لذا همه یاین متغیرها بر قتل یا خودکشی بودن یک مرگ تاثیرگذارند.
+</p>
+```{r}
+#Sex
+train %>% select(label,Sex) %>% 
+  group_by(label,Sex) %>% summarise(count = n()) %>% 
+  tidyr::spread(Sex,count)  -> Sex
+Sex %>% .[,-1] %>% as.matrix() -> SexMat
+rownames(SexMat) = Sex$label
+chisq.test(SexMat)
+
+#Race
+train %>% select(label,Race) %>% 
+  group_by(label,Race) %>% summarise(count = n()) %>% 
+  tidyr::spread(Race,count)  -> Race
+Race %>% .[,-1] %>% as.matrix() -> RaceMat
+rownames(RaceMat) = Race$label
+chisq.test(RaceMat)
+
+
+#Education
+train %>% select(label,Education) %>% 
+  group_by(label,Education) %>% summarise(count = n()) %>% 
+  tidyr::spread(Education,count)  -> Edu
+Edu %>% .[,-1] %>% as.matrix() -> EduMat
+rownames(EduMat) = Edu$label
+chisq.test(EduMat)
+
+
+#Age
+stat %>% select(MannerOfDeath,AgeRecode12) %>% 
+  group_by(MannerOfDeath,AgeRecode12) %>% summarise(count = n()) %>% 
+  tidyr::spread(AgeRecode12,count)  -> age
+age %>% .[,-1] %>% as.matrix() -> ageMat
+ageMat[which(is.na(ageMat),arr.ind = T)]= 0
+rownames(ageMat) = age$MannerOfDeath
+chisq.test(ageMat)
+
+
+
+#Method of Disposition
+train %>% select(label,MethodOfDisposition) %>% 
+  group_by(label,MethodOfDisposition) %>% summarise(count = n()) %>% 
+  tidyr::spread(MethodOfDisposition,count)  -> dispo
+dispo %>% .[,-1] %>% as.matrix() -> dispoMat
+rownames(dispoMat) = dispo$label
+chisq.test(EduMat)
+```
+
+
+***
+
+<p dir="RTL">
+۳. با استفاده از مدل رگرسیون لاجستیک یک مدل به داده ها برازش دهید و سپس آن را نقص یابی کنید.
+</p>
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir = "RTL">
+برای نقص یابی مدل، از chi-squared test برای اختلاف بین null deviance و residual deviance استفاده می کنیم.
+</p>
+
+```{r}
+logmod1 = glm(label~ResidentStatus+MonthOfDeath+Age+PlaceOfDeathAndDecedentsStatus+DayOfWeekOfDeath+
+               PlaceOfInjury+CauseRecode358+Race+Education+Sex+MaritalStatus+MethodOfDisposition,
+             data = train,family = binomial(link = 'logit'))
+summary(logmod1)
+with(logmod1, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+```
+
+
+<p dir = "RTL">
+مقدار کوچک p-value به دست آمده از تست نشان می دهد که مدل ما نسبت به مدل بدون متغیر، خروجی را بهتر پیش بینی می کند.
+</p>
+<p dir = "RTL">
+نکنه ی قابل توجه دیگری که در summary مدل به چشم می خورد، این است که متغیر race، significant نبوده است در حالی که این متغیر قاعدتا باید در قتل های آمریکا مهم باشد. بنابراین این بار از داده های اصلی ویژگی دیگری که نشان دهنده ی نژادهاست را به جای متغیر Race انتخاب می کنیم.(RaceRecode3)
+</p>
+```{r}
+
+stat %>% select(-Id,-AgeType,-AgeRecode52,-AgeRecode27,-AgeRecode12,-AgeSubstitutionFlag,
+                -InfantAgeRecode22,-InfantCauseRecode130,-CauseRecode113,-CauseRecode39,-
+                  RaceImputationFlag,-Race,-RaceRecode5,-BridgedRaceFlag,-HispanicOrigin,
+                -HispanicOriginRaceRecode,-MannerOfDeath,-CurrentDataYear,
+                -NumberOfEntityAxisConditions,-NumberOfRecordAxisConditions) %>%
+  select(-Icd10Code,-ActivityCode,-InjuryAtWork,-InjuryAtWork,-Autopsy) %>% 
+  mutate(label = recode(stat$MannerOfDeath,"2=0;3=1")) -> train2  #0:suicide 1:homicide
+
+logmod2 = glm(label~ResidentStatus+MonthOfDeath+Age+PlaceOfDeathAndDecedentsStatus+DayOfWeekOfDeath+
+               PlaceOfInjury+CauseRecode358+RaceRecode3+Education+Sex+MaritalStatus+MethodOfDisposition,
+             data = train2,family = binomial(link = 'logit'))
+summary(logmod2)
+with(logmod2, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+
+```
+<p dir="RTL">
+مشاهده می شود که AIC مدل نسبت به مدل قبلی کاهش پیدا کرده است که نشان دهنده ی عملکرد بهتر مدل جدید است. همچنین این بار متغیر مربوط به نژاد significant است. حال متغیرهایی که significant نبوده اند را از مدل حذف می کنیم تا مدل نهایی به دست بیاید.
+</p>
+```{r}
+logmod = glm(label~ResidentStatus+Age+PlaceOfDeathAndDecedentsStatus+
+                PlaceOfInjury+CauseRecode358+RaceRecode3+Education+Sex+MaritalStatus+MethodOfDisposition,
+              data = train2,family = binomial(link = 'logit'))
+summary(logmod)
+with(logmod, pchisq(null.deviance - deviance, df.null - df.residual, lower.tail = FALSE))
+```
+
+***
+
+<p dir="RTL">
+۴. با استفاده از سه نمودار خروجی مدل را نسبت به داده واقعی ارزیابی کنید.
+</p>
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+ابتدا توزیع داده های هر دو کلاس را بر حسب امتیازی که مدل برای آن ها پیش بینی کرده است بررسی می کنیم تا ببینیم آیا مدل توانسته است بین دو کلاس تا حد خوبی جدایی ایجاد کند.
+</p>
+```{r fig4, fig.height = 8, fig.width = 16, fig.align = "center"}
+train2$pred = predict(logmod,  newdata = train2, type = 'response')
+ggplot( train2, aes( pred, color = as.factor(label))) + 
+  geom_density( size = 1 ) +
+  ggtitle( "Training Set's Predicted Score" ) + 
+  scale_color_economist( name = "data", labels = c( "suicide", "homicide" ) )
+```
+<p dir="RTL">
+با توجه به نمودارهای توزیع فوق، به نظر می رسد که جدایی بین دو کلاس تا حد خوبی انجام شده است. طبق دو نمودار فوق مقدار cutoff را به صورت تقریبی برابر 0.25 انتخاب می کنیم و نمودارهای confusion را به ازای آن رسم می کنیم.همچنین نمودار roc را برای این مدل رسم می کنیم. (توابع مربوط به این نمودارها در فایل unbalanced_functions آمده است)
+</p>
+
+```{r fig5, fig.height = 8, fig.width = 16, fig.align = "center"}
+
+table(train2$label,ifelse(fitted(logmod)>0.25,1,0)) %>% plot()
+
+
+```
+```{r fig6, fig.height = 8, fig.width = 16, fig.align = "center"}
+cm_info = ConfusionMatrixInfo( data = train2, predict = "pred", 
+                               actual = "label", cutoff = .25 )
+cm_info$plot
+
+TPR = sum(cm_info$data$type == "TP")/sum(train2$label ==1)
+FPR = sum(cm_info$data$type == "FP")/sum(train2$label ==0)
+
+TPR
+FPR
+```
+
+```{r fig7, fig.height = 8, fig.width = 16, fig.align = "center",eval=F}
+cost_fp = 100;cost_fn = 100
+roc_info = ROCInfo( data = cm_info$data, predict = "predict", 
+                    actual = "actual", cost.fp = cost_fp, cost.fn = cost_fn )
+grid.draw(roc_info$plot)
+```
+
+
+***
+
+<p dir="RTL">
+۵. ابتدا ۲۰ درصد داده را به صورت تصادفی به عنوان تست در نظر بگیرید. مدل را با استفاده از ۸۰ درصد باقی مانده برازش دهید. با استفاده از پارامتر قطع ۰.۵ نتایج را برای داده تست پیش بینی کنید. سپس کمیت های زیر را محاسبه کنید.
+</p>
+
+* P: positive samples
+* N: negative samples
+* TP: true positive TP (eqv. with hit)
+* TN: true negative (eqv. with correct rejection)
+* FP: false positive (eqv. with false alarm, Type I error)
+* FN: false negative (eqv. with miss, Type II error)
+* Accuracy (ACC) ACC = (TP+TN)/(P+T)
+* False positive rate (FPR): 1- TN/N
+* True positive rate (TPR): TP/P
+
+<p dir="RTL">
+مشابه آنچه در کلاس گفته شد نمایشی از  چهار کمیت 
+TN, TP,FP,FN
+به همراه داده ها رسم نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+```{r fig8, fig.height = 8, fig.width = 16, fig.align = "center"}
+n = nrow(train2)
+train_indices = sample(1:n,size = 0.8*n, replace = F)
+test_indices = c(1:n)[-train_indices]
+
+train_data = train2[train_indices,]
+test_data = train2[test_indices,]
+
+logmod = glm(label~ResidentStatus+Age+PlaceOfDeathAndDecedentsStatus+
+               PlaceOfInjury+CauseRecode358+RaceRecode3+Education+Sex+MaritalStatus+MethodOfDisposition,
+             data = train_data,family = binomial(link = 'logit'))
+test_data$pred = predict(logmod,  newdata = test_data, type = 'response')
+train_data$pred = predict(logmod,  newdata = train_data, type = 'response')
+
+ggplot( test_data, aes( pred, color = as.factor(label))) + 
+  geom_density( size = 1 ) +
+  ggtitle( "Test Set's Predicted Score" ) + 
+  scale_color_economist( name = "data", labels = c( "suicide", "homicide" ) )
+
+cm_info = ConfusionMatrixInfo( data = test_data, predict = "pred", 
+                               actual = "label", cutoff = .5)
+results = cm_info$data$type
+P = sum(results == "FN" | results == "TP")
+P
+N = sum(results == "FP" | results == "TN")
+N
+TP = sum(results == "TP")
+TP
+TN = sum(results == "TN")
+TN
+FP = sum(results == "FP")
+FP
+FN = sum(results == "FN")
+FN
+ACC = (TP+TN)/(P+N)
+ACC
+TPR = TP/P
+TPR
+FPR = FP/N
+FPR
+```
+
+```{r fig9, fig.height = 8, fig.width = 16, fig.align = "center"}
+table(test_data$label,ifelse(test_data$pred>0.5,1,0)) %>% plot()
+```
+```{r fig10, fig.height = 8, fig.width = 16, fig.align = "center"}
+cm_info$plot
+```
+
+***
+
+<p dir="RTL">
+۶. نمودار صحت مدل (accuracy) را بر حسب مقادیر مختلف قطع برای داده تست رسم نمایید. کدام پارامتر قطع بالاترین صحت را در پیش بینی داراست؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r fig11, fig.height = 8, fig.width = 16, fig.align = "center"}
+accuracy_info = AccuracyCutoffInfo( train = train_data, test = test_data, 
+                                    predict = "pred", actual = "label" )
+accuracy_info$plot
+
+accuracy_info$data$cutoff[which.max(accuracy_info$data$test)]
+```
+
+
+***
+
+<p dir="RTL">
+۷. نمودار 
+ROC
+ را برای داده های قسمت قبل رسم نمایید. همچنین نقطه مربوط به بهترین پارامتر قطع را مشخص نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r fig12, fig.height = 8, fig.width = 16, fig.align = "center"}
+cost_fp = 100;cost_fn = 100
+roc_info = ROCInfo( data = cm_info$data, predict = "predict", 
+                    actual = "actual", cost.fp = cost_fp, cost.fn = cost_fn )
+grid.draw(roc_info$plot)
+cutoff = roc_info$cutoff
+cutoff
+```
+
+<p dir="RTL">
+حال با استفاده از cutoff به دست آمده دوباره پیش بینی را انجام داده و TPR و FPR را به دست می آوریم.
+</p>
+
+```{r fig13, fig.height = 8, fig.width = 16, fig.align = "center"}
+
+cm_info = ConfusionMatrixInfo( data = test_data, predict = "pred", 
+                               actual = "label", cutoff = cutoff)
+results = cm_info$data$type
+P = sum(results == "FN" | results == "TP")
+P
+N = sum(results == "FP" | results == "TN")
+N
+TP = sum(results == "TP")
+TP
+TN = sum(results == "TN")
+TN
+FP = sum(results == "FP")
+FP
+FN = sum(results == "FN")
+FN
+ACC = (TP+TN)/(P+N)
+ACC
+TPR = TP/P
+TPR
+FPR = FP/N
+FPR
+```
+
+```{r fig14, fig.height = 8, fig.width = 16, fig.align = "center"}
+table(test_data$label,ifelse(test_data$pred>cutoff,1,0)) %>% plot()
+```
+```{r fig15, fig.height = 8, fig.width = 16, fig.align = "center"}
+cm_info$plot
+```
+***
+
+<p dir="RTL">
+۸. با قرار دادن کمیت 
+nfolds = 5
+و با استفاده از 
+H20
+مدل مساله را بسازید و نتیجه حاصل را ارزیابی کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+library(h2o)
+h2o.init(nthreads = -1, max_mem_size = '2g', ip = "127.0.0.1", port = 50001)
+htrain = as.h2o(train2)
+chglm = h2o.glm(y = "label", x= colnames(train2)[1:12],
+                training_frame = htrain, family="binomial",nfolds = 5)
+
+chglm
+```
+<p dir="RTL"> 
+recall یا TPR در این مدل به صورت میانگین برابر 89درصد و specifity یا 1-FPR برابر 90 درصد است. همچنین، دقت به صورت میانگین 90 درصد است که نتیجه ی مناسبی است و نسبت به مدل بالا پیشرفت داشته است.
+</p>
+
+***
+
+<p dir="RTL"> 
+۹. آیا ما میتوانیم سرویسی به قضات ارایه کنیم تا با استفاده از اطلاعات مرگ بتوانند موارد مشکوک به قتل را از خودکشی تفکیک دهند؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+
+<p dir="RTL"> 
+می توان سیستمی را بر مبنای این داده ها پیشنهاد داد، گرچه بدون خطا نخواهد بود. نکته ی مهم این است که در دادگاه ها اصولا تشخیص انسان بی گناه به عنوان گناهکار هزینه ی بیشتری نسبت به بی گناه تشخیص دادن انسان های گناهکار دارد. به عبارت دیگر باید در تعیین cutoff، هزینه ی FP را بیشتر از هزینه ی FN قرار دهیم.نتیج برای دو حالت مختلف هزینه ی  FN و FP در زیر آمده است.
+</p>
+
+
+```{r fig16, fig.height = 8, fig.width = 16, fig.align = "center"}
+cost_fp = 200;cost_fn = 100
+roc_info = ROCInfo( data = cm_info$data, predict = "predict", 
+                    actual = "actual", cost.fp = cost_fp, cost.fn = cost_fn )
+
+cutoff = roc_info$cutoff
+
+cm_info = ConfusionMatrixInfo( data = test_data, predict = "pred", 
+                               actual = "label", cutoff = cutoff)
+results = cm_info$data$type
+P = sum(results == "FN" | results == "TP")
+N = sum(results == "FP" | results == "TN")
+TP = sum(results == "TP")
+TN = sum(results == "TN")
+FP = sum(results == "FP")
+FN = sum(results == "FN")
+ACC = (TP+TN)/(P+N)
+ACC
+TPR = TP/P
+TPR
+FPR = FP/N
+FPR
+```
+
+```{r fig17, fig.height = 8, fig.width = 16, fig.align = "center"}
+table(test_data$label,ifelse(test_data$pred>cutoff,1,0)) %>% plot()
+```
+```{r fig18, fig.height = 8, fig.width = 16, fig.align = "center"}
+cm_info$plot
+```
+
+
+
+```{r fig19, fig.height = 8, fig.width = 16, fig.align = "center"}
+cost_fp = 300;cost_fn = 100
+roc_info = ROCInfo( data = cm_info$data, predict = "predict", 
+                    actual = "actual", cost.fp = cost_fp, cost.fn = cost_fn )
+
+cutoff = roc_info$cutoff
+
+cm_info = ConfusionMatrixInfo( data = test_data, predict = "pred", 
+                               actual = "label", cutoff = cutoff)
+results = cm_info$data$type
+P = sum(results == "FN" | results == "TP")
+N = sum(results == "FP" | results == "TN")
+TP = sum(results == "TP")
+TN = sum(results == "TN")
+FP = sum(results == "FP")
+FN = sum(results == "FN")
+ACC = (TP+TN)/(P+N)
+ACC
+TPR = TP/P
+TPR
+FPR = FP/N
+FPR
+```
+
+```{r fig20, fig.height = 8, fig.width = 16, fig.align = "center"}
+table(test_data$label,ifelse(test_data$pred>cutoff,1,0)) %>% plot()
+```
+```{r fig21, fig.height = 8, fig.width = 16, fig.align = "center"}
+cm_info$plot
+```
+
+<p dir="RTL">
+البته نکته ای اینجا قابل تامل است که داده های آموزشی که ما داشتیم نتایج دادگاه ها و جکم قاضی ها بودند که ممکن است همراه با خطا باشد. این که سیستمی را بر این اساس آموزش هیم و از آن استفاده کنیم، بنابراین از دو جهت خطا خواهد داشت که شاید مناسب نباشد.
+</p>
+

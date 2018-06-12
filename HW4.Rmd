@@ -1,0 +1,668 @@
+---
+title: "Fourth Week: Hypothesis Testing"
+subtitle: "TIMSS Analysis"
+author: "مهسا خوش نما 93101481"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F,fig.width = 16,fig.height = 8)
+```
+
+
+<div align="center">
+<img  src="images/math.jpg"  align = 'center'>
+</div>
+
+<h1 dir="RTL"> 
+تمرین سری چهارم: چقدر ریاضی بلدیم و چرا؟
+</h1>
+
+<p dir="RTL"> لطفا مقاله زیر را مطالعه بفرمایید. </p>
+<p dir="RTL">
+[چرایی رتبه ضعیف ایران در آزمون تیمز](https://goo.gl/gX8DZc)
+</p>
+
+> <p dir="RTL"> 
+با استفاده از داده های ارزیابی تیمز ۲۰۱۵ ادعاهای زیر را مورد ارزیابی قراردهید.
+برای هر سوال علاوه بر استدلال آماری که در غالب آزمون فرض تعریف می شود از تصویرسازی مناسب باهر دو ابزار
+ggplot2
+و
+highcharter
+استفاده نمایید.
+به دلخواه به هفت گزاره از موارد زیر پاسخ دهید.
+</p>
+
+***
+```{r}
+library(dplyr)
+library(readr)
+library(ggplot2)
+library(ggthemes)
+library(highcharter)
+library(Hmisc)
+
+
+bsg = read_rds("F:/University/8th Semester/Data Analysis/HWs/hw_04/bsg.rds") # student background
+btm = read_rds("F:/University/8th Semester/Data Analysis/HWs/hw_04/btm.rds") # Teacher background
+bst = read_rds("F:/University/8th Semester/Data Analysis/HWs/hw_04/bst.rds") # student-teacher linkage
+bcg = read_rds("F:/University/8th Semester/Data Analysis/HWs/hw_04/bcg.rds") # school background
+```
+
+<p dir="RTL">
+۱. میران رضایت معلمان در پیشرفت تحصیلی دانش آموزان موثر است.
+</p>
+
+
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای بررسی رضایت معلمان پرسش 10 از پرسش نامه ی معلمان را در نظر می گیریم و بین جواب های قسمت های مختلف آن میانگین وزن دار می گیریم (گزینه های اول و دوم وزن بیشتری دارند) سپس این معیار را برای معلمان ریاضی از طریق فایل btm یافته و سپس از طریق فایل bst دانش آموزان هر معلم را یافته و امتیاز ریاضی آن ها را که میانگین ستون های bsmmat01 تا bsmmat05 است را به دست آورده. حال،بر اساس میزان رضایت معلمان که یک عدد بین 1 تا 4 است(با اعمال رند کردن میانگین وزن دار)و 1نشان دهنده ی بیشترین سطح رضایت و 4 کمترین سطح رضایت است، 4دسته امتیاز برای دانش آموزان به دست می آوریم.حال میانگین این 4دسته را با تست ANOVA بررسی می کنیم.
+</p>
+
+```{r}
+bst$score = rowMeans(bst[,c("bsmmat01","bsmmat02","bsmmat03","bsmmat04","bsmmat05")])
+full_join(
+btm %>% filter(itcourse ==1) %>% 
+  mutate(satisfaction = round((3*btbg10a + 2*btbg10b + btbg10c + btbg10d + btbg10e +
+                                 btbg10f + btbg10g)/10))%>% 
+                               select(idcntry,idschool,idteach,satisfaction),
+bst %>% filter(idsubj==1) %>% 
+  select(idcntry,idschool,idteach, score))  %>% filter(!is.na(satisfaction))  -> stat
+
+aov(score ~ as.factor(satisfaction), data = stat) -> fit
+summary.aov(fit)
+```
+
+<p dir="RTL">
+با توجه به p-value بسیار کوچک به دست آمده،میانگین این 4دسته تفاوت معناداری دارد و این یعنی این که سطح رضایت معلم ها بر عملکرد ریاضی دانش آموزان تاثیر گذار است. حال دانش آموزان را بر اساس رضایت معلم هایشان به دو دسته تقسیم می کنیم (سطح رضایت 1یا2 و سطح 3یا4) و با یک t-test یک طرفه بررسی می کنیم که آیا میانگین عملکرد دانش آموزان با معلم های راضی تر بهتر بوده است یا خیر. 
+</p>
+
+```{r}
+t.test( stat %>% filter(satisfaction<=2) %>% .$score ,stat %>% filter(satisfaction>2) %>% .$score, 
+        alt = "greater") 
+```
+<p dir="RTL">
+فرض صفر را عکس  مطلب فوق قرار داده ایم (میانگین عملکرد دانش آموزان معلم های راضی تر بدبوده است) با توجه به p-value بسیار کوچک به دست آمده این فرض رد می شود و در واقع نشان می دهدکه میانگین عملکرد دانش آموزان معلم های راضی تر بهتر بوده است.
+</p>
+
+```{r}
+ggplot(data = stat, aes(x = score , fill = as.factor(satisfaction))) + geom_density(alpha=0.3) +
+  scale_fill_hue(labels = c("Very Often","Often","Sometimes","Never or Almost Never"),
+                 name = "How often the teachers fill satisfied",
+                 h=c(100,360),l=80)
+```
+
+<p dir="RTL">
+هم چنین نمودارهای توزیع نمرات هم مطلب فوق را به خوبی نشان می دهد.(هر چه سطح رضایت معلم ها بالاتر رفته است نسبت بیشتری از دانش آموزان نمره های بالاتر گرفته اند و برعکس)
+</p>
+***
+
+<p dir="RTL">
+۲. والدینی که تحصیلات بیشتری دارند دارای فرزندان موفق تری می باشند.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای به دست آوردن معیاری برای تحصیل والدین از سوال 7 و 8 پرسش نامه دانش آموزان استفاده می کنیم و جمع پاسخ هایشان را برای پدر و مادرشان از فایل bsg به دست آورده. (البته دانش آموزانی که گزینه 8 را برای یکی از پدر و مادر خود انتخاب کرده یعنی اطلاعی از سطح تحصیلاتشان نداشته است را حذف می کنیم.) حال بر حسب معیار به دست آمده برای تحصیلات که عدی بین 2تا 14 است، دانش آموزان به 13 دسته تقسیم می شوند. برای بررسی میانگین این 13 دسته از تست ANOVA  استفاده می کنیم.
+</p>
+
+```{r}
+bsg$score = rowMeans(bsg[,c("bsmmat01","bsmmat02","bsmmat03","bsmmat04","bsmmat05")]) 
+
+bsg %>% filter(!is.na(bsbg07a) & !is.na(bsbg07b) & bsbg07a!= 8 & bsbg07b!= 8) %>% 
+  mutate(parent_edu = bsbg07a + bsbg07b) %>% 
+  select(score,parent_edu) -> stat
+aov(score ~ as.factor(parent_edu), data = stat) -> fit
+summary.aov(fit)
+```
+<p dir="RTL">
+با توجه به p-value کوچک به دست آمده میانگین این 13 دسته تفاوت معناداری داشته است و یعنی سطح تحصیلات والدین بر عملکرد ریاضی فرزندانشان موثر بوده است. برای بررسی مثبت بودن این تاثیر دانش آموزان را بر حسب تحصیلات والدین به دو دسته تقسیم کرده و تست t یک طرفه انجام می دهیم.
+</p>
+
+```{r}
+t.test( stat %>% filter(parent_edu<=7) %>% .$score, stat %>% filter(parent_edu>8) %>% .$score,
+        alt = "less")
+```
+<p dir="RTL">
+با توجه به این که فرض 1 این بوده که میانگین عملکرد دانش آموزان با والدین تحصیل کرده تر بهتر است و p-value به دست آمده بسیار کوچک است فرض 0 رد شده و یا به عبارتی فرض 1 طبق انتظار تایید می شود. 
+</p>
+
+```{r}
+ggplot(data=stat, aes(as.factor(parent_edu), score, fill = as.factor(parent_edu))) +
+  geom_boxplot() + theme(legend.position = "none") + xlab("Parents' Education Level")
+
+stat %>% group_by(parent_edu) %>% summarise(mean_score = mean(score)) %>%
+  hchart(type = "column", hcaes(x = parent_edu, y = mean_score ,color = mean_score),
+         name = "average score") %>%
+  hc_xAxis(title = list(text = "Parents' Education Level")) %>%
+  hc_yAxis(title = list(text = "average score")) %>% hc_add_theme(hc_theme_economist())
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$parent_edu,name="Math Score") %>% 
+  hc_add_theme(hc_theme_google()) %>% 
+  hc_xAxis(title=list(text="Parents' Education Level")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+<p dir="RTL">
+نمودارهای فوق هم نشان می دهد که به طور میانگین عملکرد ریاضی دانش آموزان با والدین تحصیل کرده تر بهتر بوده است و عملکردشان با سطح تحصیلات والدین ارتباط مستقیم داشته است.
+</p>
+***
+
+<p dir="RTL">
+۳. امکانات رفاهی در خانه موجب پیشرفت تحصیلی می گردد.
+</p>
+
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای به دست آوردن معیاری برای امکانات رفاهی در خانه از سوال 6 پرسشنامه دانش آموزان استفاده کرده و تعداد جواب های مثبت دانش آموزان در گزینه های این سوال را از فایل bsg به دست می آوریم. این عدد، عددی بین 0 تا 11 خواهد بود و بر این اساس دانش آموزان به 12 دسته تقسیم می شوند. میانگین عملکرد این دانش آموزان را با تست ANOVA بررسی می کنیم.
+</p>
+
+```{r}
+bsg %>% filter(!is.na(bsbg06a) & !is.na(bsbg06b) & !is.na(bsbg06c) & !is.na(bsbg06d) &
+               !is.na(bsbg06e) & !is.na(bsbg06f) & !is.na(bsbg06g) & !is.na(bsbg06h) &
+                !is.na(bsbg06i) & !is.na(bsbg06j) & !is.na(bsbg06k)) %>% 
+        mutate(home = (bsbg06a == 1) + (bsbg06b == 1) + (bsbg06c == 1) + (bsbg06d == 1) +
+              (bsbg06e == 1) + (bsbg06f == 1) + (bsbg06g == 1) + (bsbg06h == 1) + 
+              (bsbg06i == 1) + (bsbg06j == 1) + (bsbg06k == 1)) %>%  
+        select(score,home) -> stat
+
+aov(score ~ as.factor(home), data = stat) -> fit
+summary.aov(fit)
+```
+<p dir = "RTL">
+p-value کوچک به دست آمد نشان دهنده ی تاثیر گذاری امکانات رفاهی خانه بر عملکرد ریاضی دانش آموزان می باشد. برای نشان دهنده ی اثر مثبت آن دانش آموزان را بر اساس امکانات خانه به دو دسته تقسیم کرده و تست t  یک طرفه انجام می دهیم.
+</p>
+
+```{r}
+t.test( stat %>% filter(home<=5) %>% .$score ,stat %>% filter(home>6) %>% .$score, 
+        alt = "less") 
+```
+<p dir = "RTL">
+با توجه به این که فرض صفر را عملکرد ضعیف تر دانش آموزان با امکانات رفاهی بیشتر در خانه در نظر گرفتیم، p-value کوچک به دست آمده این فرض را رد می کند و نشان می دهد که دانش آموزان با امکانات رفاهی بیشتر به طور میانگین عملکرد بهتری داشته اند. نمودارهای زیر هم نشان دهنده ی این مطلب هستند:
+</p>
+
+```{r}
+ggplot(data=stat, aes(as.factor(home), score, fill = as.factor(home))) +
+  geom_boxplot() + theme(legend.position = "none") + xlab("Home Facilities Level")
+
+stat %>% group_by(home) %>% summarise(mean_score = mean(score)) %>%
+  hchart(type = "column", hcaes(x = home, y = mean_score ,color = mean_score),
+         name = "average score") %>%
+  hc_xAxis(title = list(text = "Home Facilities Level")) %>%
+  hc_yAxis(title = list(text = "average score")) %>% hc_add_theme(hc_theme_flat())
+
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$home,name="Math Score") %>% 
+  hc_add_theme(hc_theme_flat()) %>% 
+  hc_xAxis(title=list(text="Home Facilities Level")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+***
+
+<p dir="RTL">
+۴. محیط آرام مدرسه نقش مهمی در پیشرفت تحصیلی دارد.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای به دست آوردن معیاری برای آرام بودن مدرسه از پاسخ های سوال 15 پرسش نامه استفاده می کنیم و با استفاده از فایل bsg بین پاسخ قسمت های مختلف آن میانگین وزن دار می گیریم و آن را رند می کنیم. بر این اساس 4 سطح برای آرام بودن مدرسه به دست می آید و برای بررسی میانگین عملکرد دانش آموزان در این 4دسته از تست ANOVA استفاده می کنیم.
+</p>
+
+```{r}
+bsg %>% mutate(school = round((2*bsbg15a + bsbg15b + bsbg15c + bsbg15d + 2*bsbg15e + bsbg15f + 
+                                 bsbg15g)/9))%>% 
+  select(score,school) %>% filter(!is.na(school))-> stat
+
+aov(score ~ as.factor(school), data = stat) -> fit
+summary.aov(fit)
+```
+<p dir="RTL">
+با توجه به p-value کوچک به دست آمده نتیجه می گیریم که محیط آرام مدرسه بر عملکرد دانش آموزان تاثیرگذار است. برای نشان دادن تاثیر مثبت آن از یک تست t یک طرفه استفاده می کنیم.
+</p>
+
+```{r}
+t.test( stat %>% filter(school<=2) %>% .$score ,stat %>% filter(school>2) %>% .$score, 
+        alt = "greater") 
+```
+<p dir="RTL">
+با توجه به p-value بسیار کوچک به دست آمده فرض صفر که عملکرد پایین تر دانش آموزان در مدارس آرامتر رد می شود. در واقع نتیجه می گیریم که به صورت میانگین عملکرد دانش آموزانی که در مدارس آرام تر بوده اند بهتر بوده است. نمودارهای زیر هم این مطلب را تایید می کنند:
+</p>
+
+```{r}
+ggplot(data = stat, aes(x = score , fill = as.factor(school))) + geom_density(alpha=0.3) +
+  scale_fill_hue(labels = c("Agree a lot","Agree a little","Disagree a little","Disagree a lot"),
+                 name = "Do students believe their school environment is calm?",
+                 h=c(100,360),l=80)
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$school,name="Math Score") %>% 
+  hc_add_theme(hc_theme_ffx()) %>% 
+  hc_xAxis(title=list(text="School Environment Calmness Level (1:the most , 4:the least)")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+***
+
+<p dir="RTL">
+۵. معلمان با تحصیلات  بالاتر یا تجربه بیشتر دانش آموزان موفق تری تربیت می کنند.
+</p>
+
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای به دست آوردن سطح تحصیلات معلمان از سوال 4 پرسشنامه معلمان و فایل btm استفاده می کنیم. سپس با استفاده از فایل bst امتیاز ریاضی دانش آموزان مربوط به معلم های هر سطح را به دست آورده و برای مقایسه میاگین عملکردشان از تست ANOVA استفاده می کنیم.
+</p>
+
+```{r}
+full_join(
+  btm %>% filter(itcourse ==1) %>% mutate(teacher_edu = btbg04)%>% 
+    select(idcntry,idschool,idteach, teacher_edu),
+  bst %>% filter(idsubj==1) %>%
+    select(idcntry,idschool,idteach, score))  %>% filter(!is.na(teacher_edu))  -> stat
+
+aov(score ~ as.factor(teacher_edu), data = stat) -> fit
+summary.aov(fit)
+
+```
+<p dir="RTL">
+با توجه به مقدار بسیار کوچک p-value به دست آمده نتیجه می گیریم که سطح تحصیلات معلم های ریاضی (توجه داریم که فقط معلم های ریاضی را بررسی کردیم) بر عملکرد ریاضی دانش آموزانشان موثر است. برای نسان دادن تاثیر مثبت این فاکتور از تست t یک طرفه استفاده میکنیم.
+</p>
+
+```{r}
+t.test( stat %>% filter(teacher_edu<=4) %>% .$score ,stat %>% filter(teacher_edu>4) %>% .$score, 
+        alt = "less")
+```
+
+<p dir="RTL">
+p-value کوچک به دست آمده نشان می دهد که فرض صفر برقرار نیست و به عبات دیگر به طور میانگین دانش آموزانی که معلم های ریاضی تحصیلکرده تری داشته اند عملکرد ریاضی بهتری داشته اند.
+نمودارهای زیر هم موید این مطلب هستند:
+</p>
+
+```{r}
+ggplot(data=stat, aes(as.factor(teacher_edu), score, fill = as.factor(teacher_edu))) +
+  geom_boxplot() + theme(legend.position = "none") + xlab("Teachers' Education Level")
+
+stat %>% group_by(teacher_edu) %>% summarise(mean_score = mean(score)) %>%
+  hchart(type = "column", hcaes(x = teacher_edu, y = mean_score ,color = mean_score),
+         name = "average score") %>%
+  hc_xAxis(title = list(text = "Teachers' Education Level")) %>%
+  hc_yAxis(title = list(text = "average score")) %>% hc_add_theme(hc_theme_monokai())
+
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$teacher_edu,name="Math Score") %>% 
+  hc_add_theme(hc_theme_monokai()) %>% 
+  hc_xAxis(title=list(text="Teachers' Education Level")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+***
+
+<p dir="RTL"> 
+۶. پسران در کاربرد هندسه قوی تر هستند.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای به دست آوردن عملکرد دانش آموزان در هندسه، از میانگین نمره های هندسه دانش آموزان در فایل bsg استفاده می کنیم.سپس میانگین عملکرد دختران و پسران را با تست ANOVA بررسی می کنیم.
+</p>
+
+```{r}
+bsg %>% mutate(geom_score = (bsmgeo01+bsmgeo02+bsmgeo03+bsmgeo04+bsmgeo05)/5) %>% 
+       filter(!is.na(geom_score)) %>% 
+  mutate(Geom_score = as.numeric(geom_score),sex = as.numeric(itsex)) %>% 
+  select(Geom_score,sex) %>% filter(!is.na(sex))-> stat
+aov(Geom_score ~ as.factor(sex), data = stat) -> fit
+summary.aov(fit)
+```
+
+<p dir="RTL">
+p-value کوچک به دست آمده نشان دهنده تفاوت معنادار دختران و پسران در هندسه است. برای بررسی گزاره ی سوال از تست t یک طرفه استفاده می کنیم و گزاره ی سوال را فرض صفر قرار می دهیم.
+</p>
+
+```{r}
+t.test(Geom_score~sex, data = stat, alt = "greater")
+```
+
+<p dir="RTL">
+p-value کوچک به دست آمده فرض سوال را رد می کند و نسان می دهد دختران به صورت میانگین عملکرد بهتری در هندسه داشته اند.
+نمودارهای زر هم این مطلب را تایید می کنند:
+</p>
+
+```{r}
+ggplot(data = stat, aes(x = Geom_score , fill = as.factor(sex))) + geom_density(alpha=0.3) +
+  scale_fill_hue(labels = c("Girls","Boys"),
+                 name = "Gender",
+                 h=c(100,360),l=80)
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$Geom_score,by=stat$sex,name="Geometry Score") %>% 
+  hc_add_theme(hc_theme_ffx()) %>% 
+  hc_xAxis(title=list(text="School Environment Calmness Level (1:the most , 4:the least)")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+
+***
+
+<p dir="RTL"> 
+۷. تغذیه دانش آموزان نقش اساسی در یادگیری آنها دارد. 
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای بررسی تغذیه دانش آموزان از سوال شماره 12 پرسش نامه دانش آموزان که مربوط به خوردن صبحانه است استفاده می کنیم. جواب این سوال 4 سطح دارد و دانش آموزان را به 4 سطح تقسیم می کند. برای بررسی عملکرد دانش آموزان این 4 دسته از تست ANOVA استفاده می کنیم:
+</p>
+
+```{r}
+bsg %>% select(nutrition = bsbg12, score) %>% filter(!is.na(nutrition)) ->stat
+
+aov(score ~ as.factor(nutrition), data = stat) -> fit
+summary.aov(fit)
+```
+
+<p dir="RTL">
+با توجه به مقدار بسیار کوچک p-value به دست آمده نتیجه می گیریم تغذیه بر روی عملکرد ریاضی دانش آموزان موثر است. برای بررسی تاثیر مثبت آن از تست t یک طرفه استفاده می کنیم:
+</p>
+
+```{r}
+t.test( stat %>% filter(nutrition<=2) %>% .$score ,stat %>% filter(nutrition>2) %>% .$score, 
+        alt = "greater")
+```
+<p dir="RTL">
+مقدار p-value کوچک به دست آمده نشان می دهد که فرض صفر برقرار نیست یا به عبارتی به صورت میانگین عملکرد دانش آموزانی که بهتر تغذیه می کنند در ریاضی بهتر است. نمودار های زیر هم این مطلب را تایید می کنند:
+</p>
+
+```{r}
+ggplot(data = stat, aes(x = score , fill = as.factor(nutrition))) + geom_density(alpha=0.3) +
+  scale_fill_hue(labels = c("Every Day","Most Days","Sometimes","Never or Almost Never"),
+                 name = "How often do students eat breakfast on school days",
+                 h=c(100,360),l=80)
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$nutrition,name="Math Score") %>% 
+  hc_add_theme(hc_theme_monokai()) %>% 
+  hc_xAxis(title=list(text="Nutrition (1:the most , 4:the least)")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+***
+
+<p dir="RTL"> 
+۸. مدارس با امکانات بیشتر دارای عملکرد بهتری می باشند.
+</p>
+
+***
+
+<p dir="RTL"> 
+۹. علت افت تحصیلی عدم مشارکت در کلاس است.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای به دست آوردن معیاری برای مشارکت کلاسی از گزینه های e،g،i و j سوال 18 پرسش نامه دانش آموزان استفاده می کنیم و بین پاسخ آن ها میانگین می گیریم. سپس برای بررسی تفاوت عملکرد دانش آموزان در 4دسته ای که سطح مشارکت متفاوتی داشته اند از تست ANOVA استفاده می کنیم:
+</p>
+
+```{r}
+bsg %>% mutate(class = round((bsbm18e + bsbm18g + bsbm18i + bsbm18j)/4), score) %>% 
+     filter(!is.na(class)) ->stat
+
+aov(score ~ as.factor(class), data = stat) -> fit
+summary.aov(fit)
+```
+
+<p dir="RTL">
+مقدار p-value کوچک به دست آمده نشان دهنده  ی تاثیر فعالیت کلاسی بر عملکرد ریاضی دانش آموزان است. برای نشان دادن تاثیر این عامل از تست t یک طرفه استفاده می کنیم:
+</p>
+
+```{r}
+t.test( stat %>% filter(class<=2) %>% .$score ,stat %>% filter(class>2) %>% .$score, 
+        alt = "greater")
+```
+
+<p dir="RTL">
+با توجه به مقدار بسیار کوچک p-value فرض صفر برقرار نیست و درواقع عملکرد دانش آموزانی که فعالیت کلاسی بیشتری داشته اند به صورت میانگین بهتر بوده است. نمودارهای زیر هم نشان دهنده ی این مطلب هستند:
+</p>
+
+```{r}
+ggplot(data=stat, aes(as.factor(class), score, fill = as.factor(class))) +
+  geom_boxplot() + theme(legend.position = "none") + xlab("Class Activity (1:the most , 4:the least)")
+
+
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$class,name="Math Score") %>% 
+  hc_add_theme(hc_theme_ft()) %>% 
+  hc_xAxis(title=list(text="Class Activity (1:the most , 4:the least)")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+***
+
+<p dir="RTL"> 
+۱۰. دانش آموزان ایرانی در استدلال قوی تر از کاربرد هستند.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+ابتدا با توجه به این که کد ایران 364 است دانش آموزان کشور ایران را انتخاب می کنیم. سپس از میانگین نمرات Mathematics Applying و Mathematics Reasoning برای نشان دادن نمره ی دانش آموزان در کاربرد ریاضی و استدلال استفاده می کنیم.برای بررسی گزاره ی فوق از یک t-test یک طرفه و paired استفاده می کنیم( با توجه به این که نمرات هر دو برای یک دانش آموز محاسه می شود آزمون باید به صورت paired باشد).
+</p>
+
+```{r}
+bsg %>% filter(idcntry == 364) %>% mutate(applying = 
+                                    (bsmapp01 + bsmapp02 + bsmapp03 + bsmapp04 + bsmapp05)/5,
+              reasoning = (bsmrea01 + bsmrea02 + bsmrea03 + bsmrea04 + bsmrea05)/5) %>% 
+  select(reasoning,applying) -> stat
+
+t.test(stat$reasoning, stat$applying, var.equal = T, alt = "less")
+```
+
+<p dir="RTL">
+با توجه به مقدار بزرگ p-value گزاره ی مطرح شده رد نمی شود. نمودارهای زیر هم می توانند بیانگر این مطلب باشند:
+</p>
+
+```{r}
+rbind(data.frame(score = stat$reasoning,field = 1),data.frame(score = stat$applying,field=2)) ->stat
+ggplot(data=stat, aes(as.factor(field), score, fill = as.factor(field))) +
+  geom_boxplot() + theme(legend.position = "none") + xlab("field (1:reasoning , 2:applying)")
+
+
+
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$field,name="Math Score") %>% 
+  hc_add_theme(hc_theme_flat()) %>% 
+  hc_xAxis(title=list(text="field (1:reasoning , 2:applying)")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+***
+
+<p dir="RTL">
+سه گزاره جالب کشف کنید و ادعای خود را ثابت نمایید.
+</p>
+
+<h3 dir = "RTL">
+گزاره ی اول:
+</h3>
+
+<p dir="RTL">
+هرچه قدر تعداد دانش آموزان حاضر در کلاس کمتر باشد، عملکرد دانش آموزان بهتر خواهد بود.
+برای بررسی گزاره ی فوق ابتدا تعداد دانش آموزان حاضر در کلاس هر دانش آموز را به کمک سوال شماره 12 پرسش نامه معلمان پیدا می کنیم و از طریق فایل btm پاسخ آن را یافته و با استفاده از فیل bst آن را به دانش آموزان مرتبط می کنیم. در ضمن با توجه به این که بازه ی تعداد دانش آموزان در هر کلاس بین 1 تا 95 است ما آن را به 5 بازه ی 20تایی از 0 تا 100 تقسیم کرده و لذا تعداد دانش آموزان در هر کلاس را با یک عدد بین 1 تا 5 نشان می دهیم. حال برایبررسی عملکرد دانش آموزان در این 5 دسته از تست ANOVA استفاده می کنیم.
+</p>
+
+```{r}
+full_join(
+  btm %>% filter(itcourse ==1) %>% mutate(num_students = ceil(btbg12/20))%>% 
+    select(idcntry,idschool,idteach, num_students),
+  bst %>% filter(idsubj==1) %>%
+    select(idcntry,idschool,idteach, score))  %>% filter(!is.na(num_students))  -> stat
+
+aov(score ~ as.factor(num_students), data = stat) -> fit
+summary.aov(fit)
+```
+
+<p dir="RTL">
+با توجه به مقدار p-value بسیار کوچک به دست آمده نتیجه می گیریم که تعداد داشنش آموزان در هر کلاس بر عملکرد ریاضی دانش آموزان تاثیرگذار است. برای نشان دادن این که هر چه تعداد دانش آموزان کمتر باشد عملکرد بهتر خواهد بود، دو سطح 1و2 را یک دسته و 3سطح بعدی را دسته ی دیگر در نظر گرفته و تست t یک طرفه را برای نمره ریاضی دانش آموزان این دو دسته انجام می دهیم:
+</p>
+
+```{r}
+t.test( stat %>% filter(num_students<=2) %>% .$score ,stat %>% filter(num_students>2) %>% .$score, 
+        alt = "greater")
+```
+
+<p dir="RTL">
+با توجه به مقدار بسیار کوچک p-value به دست آمده فرض صفر رد می شود یا به عبارتی درستی گزاره ای که در نظر گرفتیم تایید می شود. نمودارهای زیر هم این مطلب را تایید می کنند.
+</p>
+
+
+```{r}
+
+ggplot(data=stat, aes(as.factor(num_students), score, fill = as.factor(num_students))) +
+  geom_boxplot() + theme(legend.position = "none") + xlab("Normalised Number of Students in the class ")
+
+
+
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$num_students,name="Math Score") %>% 
+  hc_add_theme(hc_theme_monokai()) %>% 
+  hc_xAxis(title=list(text="Normalised Number of Students in the class")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+<h3 dir = "RTL">
+گزاره ی دوم:
+</h3>
+
+<p dir="RTL">
+علاقه ی دانش آموزان به ریاضیات در عملکرد ریاضی آن ها موثر است.
+
+برای بررسی گزاره ی فوق از سوال 17 پرسش نامه دانش آموزان استفاده کرده و بین پاسخ های گزینه های مختلف میانگین می گیریم( گزینه های دوم و سوم منفی هستند لذا با ضریب منفی آمده اند). حال بین 4 سطح علاقه ی مختلف به ریاضیات، برای بررسی تفاوت عملکرد دانش آموزان هر دسته از تست ANOVA استفاده می کنیم
+</p>
+
+```{r}
+bsg %>% mutate(interest = round((bsbm17a + 5-bsbm17b + 5-bsbm17c + bsbm17d +
+                       bsbm17e + bsbm17f + bsbm17g + bsbm17h + bsbm17i)/9), score) %>% 
+  filter(!is.na(interest)) ->stat
+
+aov(score ~ as.factor(interest), data = stat) -> fit
+summary.aov(fit)
+```
+
+<p dir="RTL">
+مقدار بسیار کوچک p-value نشان دهنده ی تاثیر علاقه بر عملکرد دانش آموزان است. برای بررسی تاثیر مثبت آن از تست t یک طرفه استفاده می کنیم:
+</p>
+```{r}
+
+t.test( stat %>% filter(interest<=2) %>% .$score ,stat %>% filter(interest>2) %>% .$score, 
+        alt = "greater")
+```
+
+<p dir="RTL">
+مقدار بسیار کوچک p-value نشان دهنده ی عملکرد بهتر دانش آموزان علاقه مند به ریاضی است. نمودارهای زیر هم این مطلب را تایید می کنند:
+</p>
+
+```{r}
+ggplot(data = stat, aes(x = score , fill = as.factor(interest))) + geom_density(alpha=0.3) +
+  scale_fill_hue(labels = c("Agree a lot","Agree a little","Disagree a little","Disagree a lot"),
+                 name = "Do students believe they are interested in mathematics?",
+                 h=c(100,360),l=80)
+
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$interest,name="Math Score") %>% 
+  hc_add_theme(hc_theme_ft()) %>% 
+  hc_xAxis(title=list(text="Level of Interest in Mathematics (1:the most , 4:the least")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+<h3 dir = "RTL">
+گزاره ی سوم:
+</h3>
+
+<p dir="RTL">
+امکانات آموزشی مدرسه برای تدریس ریاضیات بر روی عملکرد ریاضی دانش آموزان تاثیر گذار است.
+
+برای بررسی گزاره ی فوق از سوال شماره 13 قسمت B پرسش نامه مدارس استفاده می کنیم و بین پاسخ قسمت های مختلف میانگین می کیریم. بر این اساس 4 سطح برای امکانات آموزش ریاضی در مدارس به دست می آید که عملکر دانش آموزان در هر دسته را با آزمون ANOVA بررسی می کنیم:
+</p>
+
+```{r}
+full_join(
+  bcg %>% mutate(math = round((bcbg13ba+bcbg13bb+bcbg13bc+bcbg13bd+bcbg13be)/5))%>% 
+    select(idcntry,idschool,math),
+  bsg %>% 
+    select(idcntry,idschool,score))  %>% filter(!is.na(math))  -> stat
+
+aov(score ~ as.factor(math), data = stat) -> fit
+summary.aov(fit)
+```
+
+
+<p dir="RTL">
+مقدار کوچک p-value موید گزاره ی فوق است. حال با یک t-test یک طرفه اثر مثبت این امکانات را بررسی می کنیم:
+</p>
+
+```{r}
+t.test( stat %>% filter(math<=2) %>% .$score ,stat %>% filter(math>2) %>% .$score, 
+        alt = "greater")
+```
+
+<p dir="RTL">
+مقدار کوچک p-value با توجه به فرض صفر انتخابی نشان دهنده ی این است که هر چه امکانات آموزشی مدرسه بیشتر باشد به طور میانگین عملکرد دانش آموزان بهتر خواهد بود. نمودارهای زیر هم این مساله را به خوبی نشان می دهند:
+</p>
+
+```{r}
+ggplot(data=stat, aes(as.factor(math), score, fill = as.factor(math))) +
+  geom_boxplot() + theme(legend.position = "none") + xlab("math facilities (1:the most , 4:the least) ")
+
+
+
+
+highchart() %>% 
+  hc_add_series_boxplot(stat$score,by=stat$math,name="Math Score") %>% 
+  hc_add_theme(hc_theme_flat()) %>% 
+  hc_xAxis(title=list(text="math facilities (1:the most , 4:the least)")) %>% 
+  hc_yAxis(title=list(text="Score"))
+```
+
+
+
+
+

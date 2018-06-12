@@ -1,0 +1,371 @@
+---
+title: "Sixth Week: Linear Models"
+subtitle: "House price prediction"
+author: "مهسا خوش نما 93101481"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F,fig.width = 16,fig.height = 8)
+options(width = 80)
+```
+<div align="center">
+<img  src="images/house.jpg"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با توجه به داده های قیمت منازل
+لطفا با سوالات زیر پاسخ دهید.
+</p>
+
+***
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(Hmisc)
+library(reshape2)
+library(gridExtra)
+library(corrplot)
+library(car)
+library(knitr)
+library(kableExtra)
+
+house = read_csv("F:/University/8th Semester/Data Analysis/Class/Week 6/house/train.csv")
+
+```
+
+
+<p dir="RTL">
+۱. ماتریس همبستگی متغیرهای مختلف را به دست آورده و سپس رسم نمایید.
+اعداد به دست آمده را با آزمون فرض معناداری همبستگی بسنجید و سپس ده متغیری که همبستگی بالاتری با قیمت دارند را مشخص نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir = "RTL">
+بااستفاده از تابع rcorr همبستگی و همچنین p-value آزمون همبستگی را برای دو به دوی متغیرها به دست می آوریم. با توجه به این که فرض صفر این آزمون، صفر بودن همبستگی است هرچه مقدار p-value کمتر باشد همبستگی به دست آمده در صورتی که مقدارش قابل توجه باشد،معتبرتر است.
+</p>
+
+```{r}
+house %>% mutate(age = 2018 - YearBuilt) -> house
+house %>% select_if(is.numeric) %>% select(-YearBuilt) %>%  .[,-1] -> stat
+corr = rcorr(as.matrix(stat))
+corr_matrix = corr[[1]]
+pvalue_matrix = corr[[3]]
+kable(corr_matrix) %>%  kable_styling() %>%
+  scroll_box(width = "900px", height = "600px")
+kable(pvalue_matrix) %>%  kable_styling() %>%
+  scroll_box(width = "900px", height = "600px")
+melted_cormat <- melt(corr_matrix)
+ggplot(data = melted_cormat, aes(x=Var1, y=Var2, fill=value)) + 
+  geom_tile() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1))+
+  scale_fill_gradientn(colours = c("azure","slateblue1","red"), values = c(0,0.5,1))
+corrplot(corr_matrix)
+
+colnames(melted_cormat) = c("Variables","Var2","correlation")
+melted_cormat %>% filter(Var2 == "SalePrice") %>% arrange(-abs(correlation)) %>% 
+  slice(2:11) %>% select("Variables","correlation") -> max_cor
+kable(max_cor)
+
+```
+
+***
+
+<p dir="RTL">
+۲. در یک تصویر نمودار پراکنش دو به دو ده متغیر بدست آمده به همراه قیمت را رسم نمایید و هم خطی بودن متغیرها را بررسی کنید
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+p1 = ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[1]))))+
+  ylab(as.character(max_cor$Variables[1]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue") 
+p2 = ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[2]))))+
+  ylab(as.character(max_cor$Variables[2]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue")
+p3 =  ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[3]))))+
+  ylab(as.character(max_cor$Variables[3]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue") 
+p4 =  ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[4]))))+
+  ylab(as.character(max_cor$Variables[4]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue") 
+p5 =  ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[5]))))+
+  ylab(as.character(max_cor$Variables[5]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue")
+p6 =  ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[6]))))+
+  ylab(as.character(max_cor$Variables[6]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue") 
+p7 =  ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[7]))))+
+  ylab(as.character(max_cor$Variables[7]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue")
+p8 =  ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[8]))))+
+  ylab(as.character(max_cor$Variables[8]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue") 
+p9 =  ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[9]))))+
+  ylab(as.character(max_cor$Variables[9]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue") 
+p10 =  ggplot(data = house,aes(x=SalePrice, y=house %>% select(as.character(max_cor$Variables[10]))))+
+  ylab(as.character(max_cor$Variables[10]))+geom_point(size=1) + 
+  geom_smooth( formula=y~x, colour = "blue")
+grid.arrange(p1, p2, p3, p4,p5, p6, p7, p8, p9, p10, nrow=3)
+```
+
+<p dir="RTL">
+نمودارها نشان می دهد که متغیرهای OverallQual، GrLivArea، TotalBsmtSF، 1stFlrSF و TotRmsAbvGrd بیشترین رابطه ی خطی را با قیمت دارند.
+</p>
+***
+
+<p dir="RTL">
+۳. یک مدل خطی بر اساس ده متغیر برای پیش بینی قیمت برازش دهید. و سپس خلاصه نتایج مدل را به دست آورید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+
+fit = lm(SalePrice~ OverallQual + GrLivArea + GarageCars + GarageArea + TotalBsmtSF +
+           `1stFlrSF`	+ FullBath + TotRmsAbvGrd	+ age + YearRemodAdd , data = house)
+summary(fit)
+```
+
+
+***
+
+<p dir="RTL">
+۴. نمودار قیمت واقعی و قیمت پیش بینی را رسم نمایید و خوب بودن مدل را ارزیابی کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+stat %>% select(max_cor$Variables) -> stat
+stat["PredictPrice"] = predict(fit,stat)
+stat["SalePrice"] = house["SalePrice"]
+
+ggplot(data = stat) + geom_point(aes(x = SalePrice , y = PredictPrice),
+                                 size = 1 , color = "darkolivegreen3") +
+  geom_smooth(aes(x = SalePrice , y = PredictPrice), formula=y~x, colour = "slateblue4",
+              fill = "aquamarine") +
+  geom_abline(slope = 1, intercept = 0, color = "firebrick1",size =1)
+```
+<p dir="RTL">
+هرچه نمودار قیمت های پیش بینی شده بر حسب قیمت های اصلی، به خط با شیب 1 نزدیکتر باشد مدل خطی بهتر عمل کرده است. نمودار فوق نشان می دهد که مدل خطی ما، در قیمت های پایین تر که داده بیشتر بوده است پیش بینی نسبتا مناسبی داشته است ولی در قیمت های بالا که داده ها زیاد نبوده اند قیمت را کمتر از قیمت واقعی پیش بینی کرده است.
+</p>
+***
+
+<p dir="RTL">
+۵. مقدار
+R-squared
+ مدل را به دست آورید. آیا بر اساس این کمیت مدل به خوبی به داده ها برازش داده شده است؟
+ کمیت
+ F-statistic
+ را در خلاصه مدل تفسیر نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+```{r}
+summary(fit)
+```
+<p dir="RTL">
+کمیت R-squared نشان می دهد که برازش مدل تا چه حد دقیق است و هر چه قدر به 1 نزدیکتر باش برازش بهتر است. برای مدل فوق مقدار 0.77 به دست آمده که مقدار مناسبی است.
+F-Statistics آماره ی به دست آمده از آزمون فرضی است که فرض صفر آن صفر بودن تمام ضرایب مدل است یا به عبارتی معنادار بودن مدل رگرسیونی را به طور کلی تست می کند. با توجه به این که مقدار p-value این آزمون بسیار کوچک است، فرض صفر رد می شود و نشان می دهد که مدل رگرسیون به دست آمده به طور کلی معتبر است.
+</p>
+
+***
+
+<p dir="RTL">
+۶. بر اساس
+p-value
+ سطح معناداری ضرایب تصمیم بگیرید که چه متغیرهایی در مدل سازی استفاده شود.
+بر اساس متغیرهای جدید دوباره مدل سازی کنید و نتایج رو گزارش دهید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+با توجه به signif codeهای به دست آمده از خلاصه ی مدل، متغیرهایی که  ضرایبشان معنادارتر هستند را برای مدل جدید انتخاب می کنیم.
+</p>
+
+```{r}
+fit = lm(SalePrice~ OverallQual + GrLivArea + GarageCars + TotalBsmtSF +
+            age + YearRemodAdd , data = house)
+summary(fit)
+stat["PredictPrice2"] = predict(fit,stat)
+
+
+ggplot(data = stat) + geom_point(aes(x = SalePrice , y = PredictPrice2),
+                                 size = 1 , color = "darkolivegreen3") +
+  geom_smooth(aes(x = SalePrice , y = PredictPrice2), formula=y~x, colour = "slateblue4",
+              fill = "aquamarine") +
+  geom_abline(slope = 1, intercept = 0, color = "firebrick1",size =1)
+```
+
+<p dir="RTL">
+با توجه به این که مقدار F-statistic بیشار شده است به طور کلی مدل معنادارتر است، گرچه چون تعداد متغیرها کاهش یافته است R-squared کاهش یافته است.
+</p>
+
+***
+
+<p dir="RTL">
+۷. مدل خود را بر اساس باقی مانده نقص یابی کنید.
+سه محک 
+normality, independance, Constant Variance
+ را در نقص یابی خود در نظر بگیرید.
+</p>
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+#normality
+#constant variance
+par(mfrow=c(2,2))  # set 2 rows and 2 column plot layout
+plot(fit)
+```
+
+
+<p dir="RTL">
+Homoscedasticity of residuals یا equal variance  را می توان با نمودارهای سمت چپ بررسی کرد. اگر مانده های مدل، homoscedastic باشندنمودار سمت چپ بالا و پایین باید به یک خط افقی نزدیک باشند. با توجه به این که در نمودار پایینی کاملا یک trend مشاهده می شود این فرض برقرار نیست و مانده ها heteroscedastic هستند.
+برای بررسی نرمال بودن از QQ-plot استفاده می کنیم (نمودار بالا سمت راست). اگر توزیع مانده ها نرمال باسد این نمودار باید تقریبا بر خط با شیب 1 منطبق باشد. مدلی که ما داریم به نظر می رسد تقریبا مانده ها توزیع نرمال دارند اما نمودار نرمال به نظر دم کلفت تر از توزیع مانده هاست.
+می کنیم.
+</p>
+
+
+<p dir="RTL">
+برای بررسی استقلال مانده ها از دو روش acf plot و runs test استفاده 
+</p>
+
+```{r}
+# Method 1: Visualise with acf plot
+acf(fit$residuals)
+#Method 2: Runs test to test for randomness
+lawstat::runs.test(fit$residuals)
+```
+
+<p dir="RTL">
+نمودار فوق، autocorrelation مانده و تاخیر یافته های آن را نشان می دهد.با توجه به این که مقدار autocorrelation مانده با تاخیر یافته هایش بسیار کوچک است، فرض uncorrelated بودن مانده ها تایید می شود. هم چنین مقدار p-value به دست آمده از آزمون فرض runs هم این مطلب را تایید می کند.
+</p>
+***
+
+<p dir="RTL">
+۸. داده ها را به پنج قسمت تقسیم کنید. بر اساس چهار قسمت مدل خطی را بسازید و صحت مدل را برای یک قسمت 
+باقی مانده را تست کنید. خطای پیش بینی شما چقدر است؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+n = dim(house)[1]
+train_indices = 
+  sample(1:n, size = n*0.8, replace = FALSE, prob = NULL)
+test_indices = c(1:n)[-train_indices]
+
+stat %>% select(-PredictPrice,-PredictPrice2) -> stat
+train = stat[train_indices,]
+test = stat[test_indices,]
+
+fit = lm(SalePrice~ OverallQual + GrLivArea + GarageCars + TotalBsmtSF +
+           age + YearRemodAdd , data = train)
+
+summary(fit)
+stat["PredictPrice"] = predict(fit,stat)
+
+R2 = sum((stat$PredictPrice - mean(stat$SalePrice))^2)/
+  sum((stat$SalePrice - mean(stat$SalePrice))^2)
+
+Residual_standard_error = sqrt(mean((stat$PredictPrice - stat$SalePrice)^2))
+
+R2
+Residual_standard_error
+```
+
+
+***
+
+<p dir="RTL"> 
+۹. آیا قیمت ربط غیر خطی با یکی از ده متغیر استفاده شده دارد؟
+بر اساس دستاوردهای خود مدل را بهتر نمایید.
+</p>
+
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+با اضافه کردن عبارات غیر خطی به مدل، R-squared افزایش می یابد که نشان دهنده ی بهبود مدل است.
+</p>
+
+```{r}
+fit1 = lm(SalePrice~ OverallQual*GrLivArea*GarageCars*TotalBsmtSF*age*YearRemodAdd , data = stat)
+summary(fit1)  
+```
+<p dir="RTL">
+البته برای این که مدل، پارامترهای زیادی نداشته باشد و overfitting رخ ندهد نمودار همبستگی متغیرهای استفاده شده در مدل را رسم کرده و دو تا از آن ها که همبستگی خطی بالایی با سایر متغیرها دارند را حذف کرده و دو مدل دیگر هم روی داده ها آموزش می دهیم.
+</p>
+
+```{r}
+corrplot(cor(stat %>% select(OverallQual,GrLivArea,GarageCars,TotalBsmtSF,age,YearRemodAdd)))
+fit2 = lm(SalePrice~ GrLivArea*GarageCars*TotalBsmtSF*YearRemodAdd , data = stat)
+summary(fit2)
+
+fit3 = lm(SalePrice~ (GrLivArea+GarageCars+TotalBsmtSF+YearRemodAdd)^2 , data = stat)
+summary(fit3)
+```
+
+
+***
+
+<p dir="RTL"> 
+۱۰. بر اساس مدل نهایی به دست آمده نتایج پیش بینی خود را بر روی
+test.csv
+به دست آورید و در سایت 
+kaggle
+ در مسابقه 
+ House Prices: Advanced Regression Techniques
+بارگذاری نمایید. سپس لینک رتبه و عدد آن را ضمیمه تمرین کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+پیش بینی قیمت های داده های تست را با هر سه مدل قسمت قبل انجام داده و در مسابقه ثبت می کنیم. بهترین نتیج با مدل دوم به دست آمدند:
+</p>
+
+```{r}
+test = read_csv("F:/University/8th Semester/Data Analysis/Class/Week 6/house/test.csv")
+test %>% mutate(age = 2018 - YearBuilt) %>% select(Id,OverallQual, GrLivArea, GarageCars,
+                                          TotalBsmtSF,age,YearRemodAdd )
+test["SalePrice"] = predict(fit2,test)
+test %>% select(Id,SalePrice) -> test
+na_value = mean(test$SalePrice,na.rm = T)
+test$SalePrice[661] = na_value
+test$SalePrice[1117] = na_value
+write_csv(test,"F:/University/8th Semester/Data Analysis/Class/Week 6/house/submission.csv")
+```
+
+<div align="center">
+<img  src="images/Capture.png"  align = 'center'>
+</div>
+

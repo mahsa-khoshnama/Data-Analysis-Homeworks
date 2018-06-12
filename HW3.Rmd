@@ -1,0 +1,594 @@
+---
+title: "Third Week: Exploratory Data Analysis"
+subtitle: "LaLiga Analysis"
+author: "مهسا خوش نما 93101481"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F,fig.width = 16,fig.height = 8)
+```
+
+<div align="center">
+<img  src="images/laliga-lo.jpg"  align = 'center'>
+</div>
+
+<h1 dir="RTL"> 
+تمرین سری سوم: از لالیگا تا لیگ برتر
+</h1>
+
+> <p dir="RTL"> 
+با استفاده از داده های لیگ دسته اول اسپانیا به سوالات زیر پاسخ دهید.
+از هر دو ابزار
+ggplot2
+و
+highcharter
+برای این کار تصویرسازی استفاده نمایید.
+</p>
+
+***
+```{r}
+library("dplyr")
+library("highcharter")
+library("ggplot2")
+library(engsoccerdata)
+library(ggthemes)
+options(stringsAsFactors = FALSE)
+```
+
+<p dir="RTL">
+۱. تعداد قهرمانی های تیم ها در تاریخ لالیگا  را استخراج کرده و نمودار ستونی آنها را رسم کنید.
+</p>
+
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای تشخیص قهرمان هر فصل، ابتدا امتیاز همه ی تیم ها در پایان فصل ها محاسبه کرده و سپس تیم با بیشترین امتیاز قهرمان محسوب می شود. اگر دو تیم با امتیاز برابر اول باشند نتیجه ی دو بازی رودرروی آن ها در لیگ، تعیین کننده خواهد بود. (هرکدام که مجموعا در بازی های رودررو گل بیشتری زده باشد)
+</p>
+
+```{r}
+rbind(
+  spain %>%
+    select(Season, team = home, opp = visitor, GF = hgoal, GA = vgoal),
+  spain %>%
+    select(Season, team = visitor, opp = home, GF = vgoal, GA = hgoal)
+) %>% mutate(GD = GF-GA) %>% 
+  group_by(team,Season) %>% 
+  summarize(GP = n(),
+            goalsF = sum(GF),
+            goalsA = sum(GA),
+            goaldif = sum(GD),
+            W = sum(GD>0),
+            D = sum(GD==0),
+            L = sum(GD<0)
+  ) %>% 
+  mutate(score = W*3 + D) %>%
+  arrange(Season,desc(score)) %>% 
+  group_by(Season) %>% 
+  mutate(rank = dense_rank(-score) %>% as.integer()) -> laliga1
+
+laliga1 %>% filter(rank == 1) -> champions
+
+#finding the years with ties
+num_champions = champions %>% group_by(Season) %>% summarise(count = n()) %>% filter(count>=2)
+for (year in num_champions$Season){
+  teams = champions %>% filter(Season == year) %>% .$team
+  s1 = spain %>% filter(Season == year & home == teams[1] & visitor == teams[2]) %>% .$hgoal +
+    spain %>% filter(Season == year & home == teams[2] & visitor == teams[1]) %>% .$vgoal
+  s2 = spain %>% filter(Season == year & home == teams[1] & visitor == teams[2]) %>% .$vgoal +
+    spain %>% filter(Season == year & home == teams[2] & visitor == teams[1]) %>% .$hgoal
+  if (s1>s2){
+    champions[which(champions$Season == year & champions$team == teams[2]),"rank"] = 2
+  }
+  else if (s2>s1){
+    champions[which(champions$Season == year & champions$team == teams[1]),"rank"] = 2
+  }
+  
+}
+champions = champions %>% filter(rank==1)
+champions_count = champions %>% group_by(team) %>% summarise(count = n()) %>% 
+  arrange(desc(count))
+
+#plots:
+hchart(champions_count,type = "column",hcaes(x = team, y = count),
+       name = "Championships") %>%  hc_add_theme(hc_theme_ffx())
+
+ggplot(champions_count) + geom_bar(aes(x= reorder(team,-count),y = count , 
+  fill = reorder(team,-count)), stat = "identity") +
+  scale_fill_hue(h=c(120,190),l=70) + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+  legend.position = "none") + xlab("team")
+  
+
+```
+
+***
+
+<p dir="RTL">
+۲. کسل کننده ترین لیگ و تیم را بیابید.
+نمودار ده تیم و ده فصل کسل کننده را رسم کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+معیار کسل کنندگی را کمترین تعداد گل در نظر می گیریم. برای هر فصل ابتدا مجموع گل ها را حساب کرده سپس با تعداد بازی های فصل آن را نرمال میکنیم. 10 فصل با کمترین میانکین گل به ازای هر بازی را به عنوان کسل کننده ترین فصل ها در نظر می گیریم. کسل کننده ترین فصل هم فصل با کمترین میانگین گل در بازی در نظر می گیریم.
+</p>
+
+```{r}
+boring_seasons = spain %>% group_by(Season) %>% 
+  summarise(goals = (sum(hgoal)+sum(vgoal))/(2*n())) %>% 
+  arrange(goals) %>% slice(1:10)
+
+knitr::kable(boring_seasons[1,])
+
+hchart(boring_seasons,type = "bar",hcaes(x = reorder(Season,goals), y = goals,
+                  color = reorder(Season,goals)),name = "Goals") %>%  
+  hc_add_theme(hc_theme_economist())
+
+ggplot(boring_seasons) + geom_bar(aes(x= reorder(Season,goals),y = goals , 
+                          fill = reorder(Season,goals)), stat = "identity") +
+  scale_fill_hue(h=c(360,200),l=50) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+                          legend.position = "none")
+```
+
+<p dir="RTL">
+به طرز مشابه برای هر تیم مجموع گل های زده ی آن را در تمام فصل ها محاسبه کرده و آن را با تعداد بازی هایش نرمال میکنیم. 10 تیم با کمترین میانگین گل به ازای هر بازی را به عنوان کسل کننده ترین تیم ها در نظر می گیریم.کسل کننده ترین تیم هم تیم با کمترین میانگین گل در بازی است.
+</p>
+
+```{r}
+boring_teams = laliga1 %>% group_by(team) %>% summarise(goals = sum(goalsF)/n()) %>% 
+  arrange(goals) %>% slice(1:10)
+
+knitr::kable(boring_teams[1,])
+
+hchart(boring_teams,type = "bar",hcaes(x = team, y = goals,color = team),
+       name = "Goal per Game") %>%  hc_add_theme(hc_theme_ft())
+
+ggplot(boring_teams) + geom_bar(aes(x= reorder(team,goals),y = goals , 
+                                      fill = reorder(team,goals)), stat = "identity") +
+  scale_fill_hue(h=c(0,40),l=80) + theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+                                            legend.position = "none")
+```
+
+
+***
+
+<p dir="RTL">
+۳. در چند درصد موارد قهرمان نیم فصل در پایان فصل قهرمان شده است؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+ابتدا بازی های هر فصل را بر حسب تاریخشان مرتب کرده و از این طریق امتیاز همه ی تیم ها را در نیم فصل محاسبه می کنیم. اگر دو تیم مشترکا بالاترین امتیاز را داشته باشند، ابتدا نتیجه ی دو بازی رودررویشان در لیگ را مقایسه می کنیم. اگر عملکردشان در این دو بازی یکسان باشد، اختلاف گلشان در طول نیم فصل را محاسبه می کنیم. اگر سه تیم مشترکا امتیاز اول را داشته باشند، در بازی های رودرروی دو به دویشان، اگر یکی از آن ها دو تیم دیگر را شکست داده باشد، قهرمان نیم فصل خواهد بود. پس از به دست آوردن قهرمان های نیم فصل نتیجه را با قهرمان های پایان فصل که در سوال 1 به دست آوردیم مقایسه می کنیم.
+</p>
+
+```{r}
+rbind(
+  spain %>%
+    select(Season, Date, team = home, opp = visitor, GF = hgoal, GA = vgoal),
+  spain %>%
+    select(Season, Date, team = visitor, opp = home, GF = vgoal, GA = hgoal)
+) %>% mutate(GD = GF-GA) %>%
+  mutate(W = ifelse(GD > 0,1,0),
+         D = ifelse(GD == 0,1,0),
+         L = ifelse(GD < 0,1,0)
+  ) %>% arrange(Season,team,Date) %>%
+  group_by(Season,team) %>%
+  mutate(play = row_number(Date)) %>% group_by(Season,team) %>%
+  mutate(goalsF = cumsum(GF),
+         goalsA = cumsum(GA),
+         goaldif = cumsum(GD),
+         Won = cumsum(W),
+         Drawn = cumsum(D),
+         Lost = cumsum(L)
+  ) %>%
+  mutate(score = Won*3 + Drawn) %>% arrange(Season,team,play) -> laliga2
+
+half_champions = laliga2 %>% group_by(Season) %>% filter(play == max(play)/2) %>% 
+  group_by(Season) %>% mutate(rank = dense_rank(-score)) %>% filter(rank==1)
+
+num_champions = half_champions %>% group_by(Season) %>% summarise(count = n()) %>% filter(count>=2)
+#ties between 2 teams
+for (year in num_champions$Season[which(num_champions$count==2)]){
+  teams = half_champions %>% filter(Season == year) %>% .$team
+  match = laliga2 %>% group_by(Season) %>% filter(play <= max(play)/2) %>%
+    filter(Season == year & team == teams[1] & opp == teams[2])
+  s1 = match$GF
+  s2 = match$GA
+  if (s1>s2){
+    half_champions[which(half_champions$Season == year & half_champions$team == teams[2]),"rank"] = 2
+  }
+  else if (s2>s1){
+    half_champions[which(half_champions$Season == year & half_champions$team == teams[1]),"rank"] = 2
+  }
+  else {
+    d1 = half_champions %>% filter(Season == year & team == teams[1]) %>% .$goaldif
+    d2 = half_champions %>% filter(Season == year & team == teams[2]) %>% .$goaldif
+    if (d1>d2){
+      half_champions[which(half_champions$Season == year & half_champions$team == teams[2]),"rank"] = 2
+    }
+    else if (d2>d1){
+      half_champions[which(half_champions$Season == year & half_champions$team == teams[1]),"rank"] = 2
+    }
+  }
+  
+}
+# ties between 3 teams
+for (year in num_champions$Season[which(num_champions$count==3)]){
+  teams = half_champions %>% filter(Season == year) %>% .$team
+  match1 = laliga2 %>% group_by(Season) %>% filter(play <= max(play)/2) %>%
+    filter(Season == year & team == teams[1] & opp == teams[2])
+  match2 = laliga2 %>% group_by(Season) %>% filter(play <= max(play)/2) %>%
+    filter(Season == year & team == teams[1] & opp == teams[3])
+  match3 = laliga2 %>% group_by(Season) %>% filter(play <= max(play)/2) %>%
+    filter(Season == year & team == teams[2] & opp == teams[3])
+  s1 = match1$W*3 + match1$D + match2$W*3 + match2$D
+  s2 = match1$L*3 + match1$D + match3$W*3 + match3$D
+  s3 = match2$L*3 + match2$D + match3$L*3 + match3$D
+  if (s1>s2 & s1>s3){
+    half_champions[which(half_champions$Season == year &
+              (half_champions$team == teams[2] | half_champions$team == teams[3])),"rank"] = 2
+  }
+  else if (s2>s1 & s2>s3){
+    half_champions[which(half_champions$Season == year &
+              (half_champions$team == teams[1] | half_champions$team == teams[3])),"rank"] = 2
+  }
+  else if (s3>s1 & s3>s2){
+    half_champions[which(half_champions$Season == year &
+              (half_champions$team == teams[1] | half_champions$team == teams[2])),"rank"] = 2
+  }
+  
+}
+
+half_champions = half_champions %>% filter(rank==1)
+full_join(
+  half_champions %>% select(Season, half_champion = team),
+  champions %>% select(Season, champion = team)
+) -> stat
+
+percent = sum(stat$champion == stat$half_champion)/nrow(stat) *100
+knitr::kable(percent)
+
+
+```
+<p dir="RTL">
+همان طور که مشاهده می شود، 53.488 درصد فصل ها، قهرمان نیم فصل در پایان فصل قهرمان شده است.
+</p>
+***
+
+<p dir="RTL">
+۴. در بین سال های ۲۰۰۱ تا ۲۰۱۰ گربه سیاه تیم های بزرگ چه تیم هایی بوده است؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+ابتدا باید تیم های بزرگ در این 10سال را پیدا کنیم. به این منظور، تیم های اول تا سوم در طول این 10فصل را به دست آورده و تیم هایی که حداقل دو بار در این سی تیم ظاهر شده اند را به عنوان تیم بزرگ در نظر می گیریم. گربه سیاه این تیم ه را تیم هایی در نظر می گیریم که اولا از این تیم ها نباشند، ثانیا در طول این ده سال حداقل 18 امتیاز از این تیم ها گرفته باشند.
+</p>
+
+```{r}
+##Big teams:
+laliga1 %>% filter(Season>=2001 & Season<=2010 & rank<=3) %>% 
+  group_by(team) %>% summarise(count = n()) %>% arrange(-count) %>% 
+  filter(count>=2) %>% .$team -> big_teams
+
+laliga1 %>% filter(Season>=2001 & Season<=2010 & rank<=3) %>% 
+  group_by(team) %>% summarise(count = n()) %>% arrange(-count) %>% 
+  filter(count>=2) %>% arrange(-count) %>% 
+  hchart(type = "column",hcaes(x = team, y = count),
+        name = "bigness") %>%  hc_add_theme(hc_theme_ffx())
+
+for (Team in big_teams){
+  laliga2 %>% filter(Season>=2001 & Season<=2010 & opp == Team & !(team %in% big_teams)) %>% 
+    group_by(team) %>% summarise(points = sum(W*3 + D)) %>% filter(points>=18) %>% 
+    arrange(-points) -> black_cat
+  print(sprintf("The black cats of %s are:",Team))
+  print(black_cat)
+}
+```
+<p dir="RTL">
+امتیازهای نمایش داده شده در اطلاعات گربه سیاه ها تعداد امتیازهایی است که توانسته اند از تیم مقابلشان در این ده سال بگیرند.
+</p>
+
+***
+
+<p dir="RTL">
+۵. در تاریخ لالیگا کدام تیم رکورددار زودترین قهرمانی است؟
+همچنین کدام تیم مقتدرانه ترین قهرمانی را داشته است؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+قهرمان زمانی قطعی می شود که اختلاف امتیازش با تیم دوم جدول از 3 برابر تعداد بازی های باقی مانده بیشتر باشد. در هر فصل بازی ای که در آن قهرمان قطعی شده را به دست آورده، آن را نسبت به تعداد کل بازی های هر تیم در فصل(تعداد هفته های فصل) نرمال کرده؛ در واقع بررسی می کنیم که قهرمانی در چه کسری از فصل قطعی شده و سپس زودترین قهرمانی را بر این اساس می یابیم.
+</p>
+
+```{r}
+laliga2 %>% group_by(Season,play) %>% mutate(rank = row_number(-score)) ->laliga2
+full_join(
+   laliga2%>% 
+    filter(rank==1) %>% arrange(Season,play) %>% select(Season,play,team1 = team , score1 = score),
+  laliga2 %>% 
+    filter(rank==2) %>% arrange(Season,play) %>% select(Season,play,team2 = team , score2 = score)
+) %>% group_by(Season) %>% mutate(percent_play = play/max(play)) %>% 
+  filter((score1-score2)>3*(max(play)-play)) %>%
+ group_by(Season) %>% slice(which.min(play)) -> stat
+
+stat = stat[which(stat$percent_play == min(stat$percent_play)),]
+knitr::kable(stat)
+```
+
+<p dir="RTL">
+برای به دست آوردن مقتدرانه ترین قهرمانیريا، اختلاف امتیاز تیم اول و دوم فصل را به دست آورده و با 3برابر تعداد بازی های هر تیم در لیگ یا به عبارتی ماکسیمم امتیاز ممکن برای هر تیم آن را نرمالیزه می کنیم. سپس بر اساس این معیار، مقتدرانه ترین قهرمانی را به دست می آوریم.
+</p>
+
+```{r}
+full_join(
+  laliga2 %>%
+    filter(rank==1) %>% arrange(Season,play) %>% select(Season,play,team1 = team , score1 = score),
+  laliga2 %>%
+    filter(rank==2) %>% arrange(Season,play) %>% select(Season,play,team2 = team , score2 = score)
+) %>% group_by(Season) %>% filter(play == max(play)) %>% 
+  mutate(score_diff_norm = (score1-score2)/(max(play)*3)) -> stat
+
+stat = stat[which(stat$score_diff_norm == max(stat$score_diff_norm)),]
+knitr::kable(stat)
+```
+
+***
+
+<p dir="RTL">
+۶. طولانی ترین نوار پیروزی مساوی و شکست مال چه تیم هایی است؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+برای به دست آوردن طولانی ترین نوار شکست و پیروزی، برای هر تیم در هر بازی تعداد بردهایش تا آن بازی را and منطقی اش را با بردن در همان بازی به دست آورده، در این صورت برداری به دست می آوریم که در بازی هایی که متوالیا برده تعداد بردهایش تا کنون را داریم و سایر درایه ها که مربوط به تساوی ها یا باخت ها هستند صفر خواهد بود. حال برای به دست آوردن نوار های هرتیم باید درایه هایی از این بردار را که بلافاصله بعد ار آن ها صفر آمده یعنی نوار پیروزی قطع شده را به دست آورده و اختلافشان را حساب کنیم. برای هر تیم بلندترین نوارش را به دست آورده و سپس تیم با بلندترین نوار پیروزی را می یابیم. برای نوار شکست هم دقیقا به طرز مشابه عمل می کنیم.
+</p>
+
+```{r}
+rbind(
+  spain %>%
+    select(Season, Date, team = home, opp = visitor, GF = hgoal, GA = vgoal),
+  spain %>%
+    select(Season, Date, team = visitor, opp = home, GF = vgoal, GA = hgoal)
+) %>% mutate(GD = GF-GA) %>%
+  mutate(W = ifelse(GD > 0,1,0),
+         D = ifelse(GD == 0,1,0),
+         L = ifelse(GD < 0,1,0)
+  ) %>% arrange(team,Season,Date) %>%
+  group_by(team) %>%
+  mutate(play = row_number(Date)) %>% group_by(team) %>%
+  mutate(
+         Won = cumsum(W)*W,
+         Lost = cumsum(L)*L
+  ) %>%
+  arrange(team,play) -> laliga3
+
+
+W_tape = c()
+L_tape = c()
+for (t in unique(laliga3$team)) {
+  won_tape = laliga3 %>% filter(team == t) %>% .$Won
+  won_tape = unique(won_tape * as.numeric(!c(won_tape[-1],0))) %>% .[which(.>0)]
+  won_tape = won_tape - c(0,won_tape[1:length(won_tape)-1])
+  W_tape = c(W_tape,max(won_tape))
+  lst_tape = laliga3 %>% filter(team == t) %>% .$Lost
+  lst_tape = unique(lst_tape * as.numeric(!c(lst_tape[-1],0))) %>% .[which(.>0)]
+  lst_tape = lst_tape - c(0,lst_tape[1:length(lst_tape)-1])
+  L_tape = c(L_tape,max(lst_tape))
+}
+
+tape = data.frame(unique(laliga3$team),W_tape,L_tape)
+
+knitr:: kable(tape[which(tape$W_tape == max(tape$W_tape)),1:2])
+knitr:: kable(tape[which(tape$L_tape == max(tape$L_tape)),c(1,3)])
+
+```
+
+***
+
+<p dir="RTL">
+۷. زودترین سقوط مال کدام تیم بوده است؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+با فرض این که در هر فصل، سه تیم حذف می شوند هر گاه فاصله ی تیم آخر با تیم چهارم، بیش از سه برابر تعداد بازی های باقی مانده باشد تیم آخر سقوطش قطعی می شود. بنابراین در هر فصل بازی ای که در آن سقوط آخرین تیم قطعی شده را به دست آورده، آن را نسبت به تعداد کل هفته های فصل نرمال کرده و سپس زوترین سقوط را با این معیار به دست می آوریم.
+</p>
+
+```{r}
+laliga2 %>% group_by(Season,play) %>% mutate(rank = row_number(-score)) ->laliga2
+full_join(
+  laliga2%>% group_by(Season) %>% 
+    filter(rank==max(rank)-3) %>% arrange(Season,play) %>% select(Season,play,team1 = team , score1 = score),
+  laliga2 %>% group_by(Season) %>% 
+    filter(rank==max(rank)) %>% arrange(Season,play) %>% select(Season,play,team2 = team , score2 = score)
+) %>% group_by(Season) %>% mutate(percent_play = play/max(play)*100) %>% 
+  filter((score1-score2)>3*(max(play)-play)) %>%
+  group_by(Season) %>% slice(which.min(play)) -> stat
+
+stat = stat[which(stat$percent_play == min(stat$percent_play)),]
+knitr:: kable(stat)
+```
+
+***
+
+<div align="center">
+<img  src="images/standings.png"  align = 'center'>
+</div>
+
+<p dir="RTL">
+مانند شکل بالا تصویری از روند تغییر رتبه تیم ها در طول فصل ۱۹۹۸ رسم نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+laliga2 %>% filter(Season == 1998) %>% 
+  hchart(type = "line", hcaes(x = Date, y = rank, group = team)) %>% 
+  hc_yAxis(title = list(text = "Position")) %>%
+  hc_xAxis(title = list(text = "")) %>% 
+  hc_legend(align = "right", verticalAlign = "top",
+            layout = "vertical", x = 0, y = 100)
+
+
+laliga2 %>% filter(Season == 1998) %>% 
+  ggplot()+geom_line(aes(x=Date, y=rank, group= team,colour = team),size=1.5) +
+  scale_colour_hue(h=c(360,120),l=70)
+```
+
+***
+
+<div align="center">
+<img  src="images/bd_10.gif"  align = 'center'>
+</div>
+
+<p dir="RTL">
+۹. جدولی مشابه بالا برای فصل ۲۰۱۲ از  کل نتایج طراحی کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+spain %>% filter(Season == 2012) %>% arrange(home,visitor)-> laliga2012
+laliga2012$home <- factor(laliga2012$home, levels=rev(unique(laliga2012$home)))
+ggplot(data = laliga2012 ,aes(home,visitor, fill = factor(as.numeric(home)%%2)))  + 
+  geom_tile(colour="aliceblue", size=1.5, stat="identity", height=1, width=1) + 
+  geom_text(data=laliga2012, aes(home,visitor, label =FT), color="black", size=rel(3)) +
+  scale_fill_manual(values = c("lightblue2","slategray3"))+
+  xlab("") + 
+  ylab("") +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.line = element_blank(),
+    axis.ticks = element_blank(), 
+    panel.background = element_rect(fill="aliceblue"),
+    plot.background = element_rect(fill="aliceblue"),
+    axis.text.x  = element_text(angle=90, vjust=0.5, hjust=0) ,
+    legend.position = "none"
+  ) + coord_flip()
+```
+
+
+***
+
+<p dir="RTL">
+۱۰. سه آماره به همراه نمودار فردوسی پسند استخراج کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+<p dir="RTL">
+ابتدا بررسی می کنیم که کدام تیم ها در تمام فصول توانسته اند نتیج بازی های باخنه را به نفع خود برگردانند. به این منظور از دو معیار استفاده کرده و میانگین وزن دار آن ها را به عنوان معیار نهایی در نظر می گیریم. معیار اول: هر تیم، چند درصد از بازی هایی که در نیمه ی اول باخنه است را نهایتا برده است. معیار دوم: هر تیم چند درصد از بازی هایی که در نیمه ی اول باخته است را نهایتا برده است و اختلاف گل در نیمه ی اول آن بازی ها بیشتر مساوی 2 بوده است. معیار اول را با وزن 0.7 و معیار دوم را با وزن 0.3 در نظر می گیریم و نمودار ده تیم با بیشترین معیار را رسم می کنیم.
+</p>
+
+```{r}
+spain$hgoal_half = as.numeric(substr(spain$HT, 1, 1))
+spain$vgoal_half = as.numeric(substr(spain$HT, 3, 3))
+
+
+rbind(
+  spain %>% filter(!is.na(HT)) %>% 
+    select(Season, Date, team = home, opp = visitor, GF = hgoal, GA = vgoal,
+           GFH = hgoal_half, GAH = vgoal_half),
+  spain %>% filter(!is.na(HT)) %>% 
+    select(Season, Date, team = visitor, opp = home, GF = vgoal, GA = hgoal,
+           GFH = vgoal_half, GAH = hgoal_half)
+) %>% mutate(GD = GF-GA , GDH = GFH-GAH) %>%
+  mutate(W = ifelse(GD > 0,1,0),
+         D = ifelse(GD == 0,1,0),
+         L = ifelse(GD < 0,1,0),
+         WH = ifelse(GDH > 0,1,0),
+         DH = ifelse(GDH == 0,1,0),
+         LH = ifelse(GDH < 0,1,0)
+  ) %>% group_by(team) %>%
+  summarise(L = sum(LH==1),score = (0.7*sum(LH==1&W==1)+0.3*sum(GDH<=-2 & W==1))/sum(LH==1)) %>%
+  arrange(score) %>% arrange(-score) %>% slice(1:10) -> stat
+
+ggplot(data = stat) + geom_bar(aes(x = reorder(team,-score),y =score ,fill = reorder(team,-score)),stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),legend.position = "none") + 
+  scale_fill_hue(h=c(360,180),l=70) + xlab("team") + ylab("average score")
+
+hchart(stat,type = "column", hcaes(x = team, y = score,color = score),name = "average score") %>% 
+  hc_xAxis(title = list(text = "team")) %>%
+  hc_yAxis(title = list(text = "average score")) %>% hc_add_theme(hc_theme_economist())
+```
+<p dir="RTL">
+حال بررسی می کنیم که در 20 سال اخیر یعنی 1997 تا 2016، به طور میانگین، تعداد بازی های پرگل در هفته های مختلف لیگ چگونه تغییر می کند. به این منظور در هرهفته بررسی می کنیم که چند درصد بازی ها بیش از 3 گل داشته اند و بین این 20 سال میانگین می گیریم.
+</p>
+
+```{r}
+laliga2 %>% filter(Season<=2016 & Season>=1997) %>% group_by(play) %>%
+  summarise(percent = sum((GF+GA)>=4)/n()) %>% 
+  hchart(type = "line", hcaes(x = play, y = percent), name = "Percent") %>% 
+  hc_yAxis(title = list(text = "Percent of Plays with high number of goals")) %>%
+  hc_xAxis(title = list(text = "Week")) %>% hc_add_theme(hc_theme_db())
+
+laliga2 %>% filter(Season<=2016 & Season>=1997) %>% group_by(play) %>%
+  summarise(percent = sum((GF+GA)>=4)/n()) %>% 
+  ggplot() + geom_line(aes(x = play, y = percent),size=1,color = "coral1") + 
+  xlab("Week") + ylab("Percent of Plays with high number of goals")
+```
+
+<p dir="RTL">
+به نظر می رسدکه در هفته های اول تیم که تیم ها پرانرژی اند تعداد خوبی از بازی ها پرگل هستند .از هفته ی 24م تا 34م تعداد بازی های پرگل کاهش می یابد که نشان دهنده ی کم شدن توان فیزیکی بازیکنان در اواسط لیگ است. اما در هفته های آخر که هفته های تعیین کننده ای برای قهرمانی و نیز سقوط می باشد، تعداد بازی های پرگل افزایش می یابد.
+</p>
+
+<p dir="RTL">
+در انتها می خواهیم بررسی کنیم که دفاع خوب داشتن در به دست آوردن رتبه ی خوب در لیگ موثرتر است یا حمله ی خوب داشتن. به این منظور معیار دفاع خوب را کم گل خوردن در لیگ و معیار حمله ی خوب را زیاد گل زدن در نظر می گیریم.حال برای هر یک از لیگ های 2997 تا 2016، پنج تیم با بهترین دفاع، پنج تیم با بهترین حمله و پنج تیم اول لیگ را می یابیم و بررسی می کنیم چند درصد از 5تیم با بهترین دفاع در بین 5تیم اول لیگ بوده اند. همین معیار را برای تیم ها با بهترین دفاع به دست می آوریم و نمودار آن ها را رسم می کنیم.
+</p>
+
+```{r}
+years = c(1997:2016)
+attack = c()
+defense = c()
+for (year in years){
+  laliga2 %>% filter(Season == year) %>% filter(play==max(play) & rank<=5) %>% .$team -> first_teams
+  laliga2 %>% filter(Season == year) %>% filter(play==max(play)) %>% group_by(team) %>% 
+    summarise(def = sum(GA), att = sum(GF))->stat
+  stat %>% arrange(def) %>% slice(1:5) %>%  .$team -> teams_def
+  stat %>% arrange(-att) %>% slice(1:5) %>%  .$team -> teams_att
+  attack = c(attack, sum(teams_att %in% first_teams)/5*100)
+  defense = c(defense, sum(teams_def %in% first_teams)/5*100)
+}
+stat = rbind(data.frame(years,percent = attack, strategy = "attack"),
+             data.frame(years,percent = defense, strategy = "defense"))
+
+
+stat %>% 
+  hchart(type = "line", hcaes(x = years, y = percent, group = strategy)) %>% 
+  hc_legend(align = "right", verticalAlign = "top",
+            layout = "vertical", x = 0, y = 100)
+
+
+stat %>%
+  ggplot()+geom_line(aes(x= years, y=percent, group= strategy,colour = strategy),size=1.5)
+
+```
+
+<p dir="RTL">
+همان طور که نمودارها نشان می دهند به نظر می رسد که حمله ی خوب داشتن در به دست آوردن رتبه ی خوب در جدول موثرتر است و تعداد زیادی از لیگ ها 5تیم اول از لحاظ حمله 5تیم اول لیگ بوده اند. (گرچهنباید از این غافل شده این دو از هم مستقل نیستند و خیلی اوقات تیم های با بهترین حمله، تیم های با بهترین دفاع نیز هستند و این امر می تواند بر رتبه ی خوب آن ها موثر باشد)
+</p>

@@ -1,0 +1,604 @@
+---
+title: "Tenth Week: Principal Component Analysis and Factor Analysis"
+subtitle: "PCA Stock, image, ..."
+author: "مهسا خوش نما 93101481"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F)
+options(width = 80)
+```
+<div align="center">
+<img  src="images/stock.jpg"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با استفاده از داده های OHLCV شرکت های تشکیل دهنده شاخص s&p500 و همچنین داده مربوط به شاخص های اقتصادی به سوالات زیر پاسخ دهید.
+</p>
+
+```{r}
+library(ggbiplot)
+library(dplyr)
+library(readr)
+library(stringr)
+library(tidyr)
+library(car)
+library(highcharter)
+library(knitr)
+library(EBImage)
+```
+
+
+***
+
+<p dir="RTL">
+۱. چه شرکتی رکورددار کسب بیشترین سود در بازه یکساله، دو ساله و پنج ساله می باشد؟ این سوال را برای بخش های مختلف مورد مطالعه قرار دهید و رکورددار را معرفی کنید. (برای این کار به ستون sector داده constituents مراجعه کنید.) برای هر دو قسمت نمودار سود ده شرکت و یا بخش برتر را رسم نمایید.
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای هر شرکت، تمام بازه های یکساله، دو ساله و پنج ساله ی ممکن که در داده های آن موجود است را به دست آورده و سود سهام شرکت بر حسب درصد را در این بازه حاسبه می کنیم.
+</p>
+
+```{r}
+# textpath = list.files("F:/University/8th Semester/Data Analysis/Class/Week 9/class_data/stock_dfs/",
+#                       full.names = T)
+# name = list.files("F:/University/8th Semester/Data Analysis/Class/Week 9/class_data/stock_dfs/") %>% 
+#   str_replace(".csv","")
+# 
+# data = read_csv(textpath[1]) %>% mutate(company = name[1])
+# for (i in 2:length(textpath)){
+#   x = read_csv(textpath[i]) %>% mutate(company = name[i])
+#   data <- rbind(data,x)                
+# }
+sector = read_csv("F:/University/8th Semester/Data Analysis/Class/Week 9/class_data/constituents.csv")
+data = read_csv("F:/University/8th Semester/Data Analysis/HWs/hw_09/data.csv")
+
+##1 year
+returns_1year = data["Date"]+365
+returns_1year$company = data$company
+returns_1year$Date1 = data$Date
+returns_1year$price1 = data$Close
+
+returns_1year = merge(data %>% select(Date,company, Close),returns_1year,by=c("Date","company"))
+returns_1year %>% arrange(company, Date) %>% 
+  mutate(percent_return = (Close-price1)/price1*100) %>% arrange(-percent_return)-> returns_1year
+
+colnames(returns_1year) = c("End Date","company","End Close Price","Start Date","Start Close Price","percent_return")
+returns_1year = returns_1year[c("company","Start Date","End Date","Start Close Price","End Close Price","percent_return")]
+
+kable(returns_1year %>% head(20))
+```
+<p dir="RTL">
+همان طور که مشاهده می شود شرکت Equinix رکورددار بیشترین سود است و به تنهایی رتبه ی 1 تا 10 را به خود اختصاص داده است. به منظور این که سایر شرکت ها با سود عمده را به دست آوریم، از هر شرکت فقط رکورد بیشترین سود آن را نگه می داریم. در این صورت نتایج به صورت زیر خواهد بود:
+</p>
+
+```{r fig1, fig.height = 8, fig.width = 16, fig.align = "center"}
+returns_1year_summary = returns_1year %>% group_by(company) %>% top_n(1,percent_return) %>%
+  arrange(-percent_return)
+
+
+
+source("F:/University/8th Semester/Data Analysis/HWs/hw_09/addNewData.R")
+sector %>% select(lookupValue = Symbol,newValue = Name) %>% 
+  mutate(lookupVariable = "company", newVariable = "Company Name") -> dictionary
+allowedVars = "Company Name"
+write_csv(dictionary,"F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv")
+
+returns_1year_summary = 
+  addNewData("F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv",
+             returns_1year_summary , allowedVars)
+
+hchart(returns_1year_summary[1:10,],'column',hcaes(x = `Company Name`,y=percent_return),
+       name = "returns(percent)") %>% 
+  hc_title(text = "1 year returns") %>% hc_add_theme(hc_theme_google())
+
+
+```
+
+<p dir="RTL">
+به همین ترتیب برای سودهای 2 و 5 ساله هم داریم:
+</p>
+
+```{r fig2, fig.height = 8, fig.width = 16, fig.align = "center"}
+##2 year
+returns_2year = data["Date"]+730
+returns_2year$company = data$company
+returns_2year$Date1 = data$Date
+returns_2year$price1 = data$Close
+
+returns_2year = merge(data %>% select(Date,company, Close),returns_2year,by=c("Date","company"))
+returns_2year %>% arrange(company, Date) %>% 
+  mutate(percent_return = (Close-price1)/price1*100) %>% arrange(-percent_return)-> returns_2year
+
+colnames(returns_2year) = c("End Date","company","End Close Price","Start Date","Start Close Price","percent_return")
+returns_2year = returns_2year[c("company","Start Date","End Date","Start Close Price","End Close Price","percent_return")]
+
+returns_2year_summary = returns_2year %>% group_by(company) %>% top_n(1,percent_return) %>%
+  arrange(-percent_return)
+
+
+returns_2year_summary = 
+  addNewData("F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv",
+             returns_2year_summary , allowedVars)
+
+hchart(returns_2year_summary[1:10,],'column',hcaes(x = `Company Name`,y=percent_return),
+       name = "returns(percent)") %>% 
+  hc_title(text = "2 year returns") %>% hc_add_theme(hc_theme_google())
+```
+
+```{r fig3, fig.height = 8, fig.width = 16, fig.align = "center"}
+##5 year
+returns_5year = data["Date"]+5*365
+returns_5year$company = data$company
+returns_5year$Date1 = data$Date
+returns_5year$price1 = data$Close
+
+returns_5year = merge(data %>% select(Date,company, Close),returns_5year,by=c("Date","company"))
+returns_5year %>% arrange(company, Date) %>% 
+  mutate(percent_return = (Close-price1)/price1*100) %>% arrange(-percent_return)-> returns_5year
+
+colnames(returns_5year) = c("End Date","company","End Close Price","Start Date","Start Close Price","percent_return")
+returns_5year = returns_5year[c("company","Start Date","End Date","Start Close Price","End Close Price","percent_return")]
+
+returns_5year_summary = returns_5year %>% group_by(company) %>% top_n(1,percent_return) %>%
+  arrange(-percent_return)
+returns_5year_summary = 
+  addNewData("F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv",
+             returns_5year_summary , allowedVars)
+
+hchart(returns_5year_summary[1:10,],'column',hcaes(x = `Company Name`,y=percent_return),
+       name = "returns(percent)") %>% 
+  hc_title(text = "5 year returns") %>% hc_add_theme(hc_theme_google())
+
+```
+
+<p dir="RTL">
+برای به دست آوردن سود قسمت های مختلف، در تمام بازه های یک، دو و یا پنج ساله ی ممکن میانگین سودهای شرکت ها در هر بخش را به دست آورده و آن را به عنوان سود در آن بخش معرفی می کنیم. توجه شود که در این قسمت هم مانند قسمت قبل چون ممکن است یک بخش رتبه ی 1 تا 10 را به تنهایی به خود اختصاص دهد، از هر بخش بهترین رکورد آن را نگه می داریم.
+</p>
+
+```{r fig4, fig.height = 8, fig.width = 16, fig.align = "center"}
+source("F:/University/8th Semester/Data Analysis/HWs/hw_09/addNewData.R")
+sector %>% select(lookupValue = Symbol,newValue = Sector) %>% 
+  mutate(lookupVariable = "company", newVariable = "sector") -> dictionary
+allowedVars = "sector"
+write_csv(dictionary,"F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv")
+
+returns_1year = 
+  addNewData("F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv",
+             returns_1year , allowedVars)
+returns_1year_sector = returns_1year %>% group_by(`Start Date`,sector) %>% 
+  summarise(mean_percent_return = mean(percent_return)) %>% filter(!is.na(sector)) %>% 
+  arrange(-mean_percent_return)
+returns_1year_sector_summary = returns_1year_sector %>% group_by(sector) %>% 
+  top_n(1,mean_percent_return) %>% arrange(-mean_percent_return)
+hchart(returns_1year_sector_summary,'column',hcaes(x = sector,y=mean_percent_return),
+       name = "returns(percent)") %>% 
+  hc_title(text = "1 year returns") %>% hc_add_theme(hc_theme_google())
+
+```
+
+```{r fig5, fig.height = 8, fig.width = 16, fig.align = "center"}
+returns_2year = 
+  addNewData("F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv",
+             returns_2year , allowedVars)
+returns_2year_sector = returns_2year %>% group_by(`Start Date`,sector) %>% 
+  summarise(mean_percent_return = mean(percent_return)) %>% filter(!is.na(sector)) %>%
+  arrange(-mean_percent_return)
+returns_2year_sector_summary = returns_2year_sector %>% group_by(sector) %>% 
+  top_n(1,mean_percent_return) %>% arrange(-mean_percent_return)
+hchart(returns_2year_sector_summary,'column',hcaes(x = sector,y=mean_percent_return),
+       name = "returns(percent)") %>% 
+  hc_title(text = "2 year returns") %>% hc_add_theme(hc_theme_google())
+```
+
+
+```{r fig6, fig.height = 8, fig.width = 16, fig.align = "center"}
+returns_5year = 
+  addNewData("F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv",
+             returns_5year , allowedVars)
+returns_5year_sector = returns_5year %>% group_by(`Start Date`,sector) %>% 
+  summarise(mean_percent_return = mean(percent_return)) %>% filter(!is.na(sector)) %>%
+  arrange(-mean_percent_return)
+
+returns_5year_sector_summary = returns_5year_sector %>% group_by(sector) %>% 
+  top_n(1,mean_percent_return) %>% arrange(-mean_percent_return)
+
+
+hchart(returns_5year_sector_summary,'column',hcaes(x = sector,y=mean_percent_return),
+       name = "returns(percent)") %>% 
+  hc_title(text = "5 year returns") %>% hc_add_theme(hc_theme_google())
+```
+
+***
+
+<p dir="RTL">
+۲. یک اعتقاد خرافی می گوید خرید سهام در روز سیزدهم ماه زیان آور است. این گزاره را مورد ارزیابی قرار دهید.
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+با یک آزمون فرض t این گزاره را بررسی می کنیم.
+</p>
+
+```{r }
+returns = data %>% select(Date,Open,Close) %>% mutate(return = Close - Open)
+returns$day = returns$Date  %>% str_sub(start = 9 , end = 10) %>% as.numeric()
+returns %>% filter(day==13) -> returns
+t.test(returns$return,NULL,"greater",mu=0)
+```
+
+<p dir="RTL">
+مقدار بسیار کوچک p-value به دست آمده نشان می دهد گزاره درست نیست.
+</p>
+***
+
+<p dir="RTL">
+۳. رکورد بیشترین گردش مالی در تاریخ بورس برای چه روزی بوده است و چرا!!!
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+```{r}
+data %>% group_by(Date) %>% summarise(trans = sum((High-Low)*Volume)) %>% arrange(-trans) -> trans
+kable(trans %>% head(1))
+```
+
+<p dir="RTL">
+مشاهده می شود که 10 اکتبر 2008 کمترین گردش مالی در تاریخ بورس را داراست و دلیل آن بحران مالی جهانی در اکتبر سال 2008 است.
+</p>
+***
+
+<p dir="RTL">
+۴. شاخص AAPL که نماد شرکت اپل است را در نظر بگیرید. با استفاده از رگرسیون خطی یک پیش کننده قیمت شروع (open price) بر اساس k روز قبل بسازید. بهترین انتخاب برای k چه مقداری است؟ دقت پیش بینی شما چقدر است؟
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+k را از 1 تا 10 تغییر داده و برای هر کدام، یک مدا رگرسیون خطی طراحی می کنیم. معیار مناسب بودن مدل را R2 و SSE تعریف می کنیم. مشاهده می شود که هم R2 برای k=10 ماکزیمم است و هم SSE برای آن کمینه است. لذا k=10 به عنوان بهترین k انتخاب می شود. سپس سعی می کنیم بر اساس significant بودن regressor ها مدل را بهبود دهیم تا به مدل نهایی برسیم.
+</p>
+
+<p dir="RTL">
+نموداری برای نشان دادن نحوه ی عملکرد مدل رسم شده است. همچنین برای دقیقتر بودن بررسی ها داده ها را به نسبت 8 و 2 به داده های آموزشی و تست تقسیم کرده و بار دیگر مدل را طراحی می کنیم و عملکرد مدل را با نموداری برای داده های پیش بینی شده ی تست نمایش می دهیم.
+</p>
+
+```{r fig7, fig.height = 8, fig.width = 16, fig.align = "center"}
+apple = read_csv("F:/University/8th Semester/Data Analysis/Class/Week 9/class_data/stock_dfs/AAPL.csv")
+open = apple$Open
+n = length(open)
+
+R2 = numeric(10)
+SSE = numeric(10)
+data_apple = data.frame(v1 = open[10:(n-1)], v2 = open[9:(n-2)],v3 = open[8:(n-3)],v4 = open[7:(n-4)],
+                        v5 = open[6:(n-5)], v6 = open[5:(n-6)], v7 = open[4:(n-7)], v8 = open[3:(n-8)],
+                        v9 = open[2:(n-9)], v10 = open[1:(n-10)],label = open[11:n])
+#k=1
+model = lm(label~v1, data=data_apple)
+R2[1] = summary(model)$r.squared
+SSE[1] = sum(summary(model)$residuals^2)
+
+#k=2
+model = lm(label~v1+v2, data=data_apple)
+R2[2] = summary(model)$r.squared
+SSE[2] = sum(summary(model)$residuals^2)
+
+#k=3
+model = lm(label~v1+v2+v3, data=data_apple)
+R2[3] = summary(model)$r.squared
+SSE[3] = sum(summary(model)$residuals^2)
+
+#k=4
+model = lm(label~v1+v2+v3+v4, data=data_apple)
+R2[4] = summary(model)$r.squared
+SSE[4] = sum(summary(model)$residuals^2)
+
+#k=5
+model = lm(label~v1+v2+v3+v4+v5, data=data_apple)
+R2[5] = summary(model)$r.squared
+SSE[5] = sum(summary(model)$residuals^2)
+
+#k=6
+model = lm(label~v1+v2+v3+v4+v5+v6, data=data_apple)
+R2[6] = summary(model)$r.squared
+SSE[6] = sum(summary(model)$residuals^2)
+
+#k=7
+model = lm(label~v1+v2+v3+v4+v5+v6+v7, data=data_apple)
+R2[7] = summary(model)$r.squared
+SSE[7] = sum(summary(model)$residuals^2)
+
+#k=8
+model = lm(label~v1+v2+v3+v4+v5+v6+v7+v8, data=data_apple)
+R2[8] = summary(model)$r.squared
+SSE[8] = sum(summary(model)$residuals^2)
+
+#k=9
+model = lm(label~v1+v2+v3+v4+v5+v6+v7+v8+v9, data=data_apple)
+R2[9] = summary(model)$r.squared
+SSE[9] = sum(summary(model)$residuals^2)
+
+#k=10
+model = lm(label~v1+v2+v3+v4+v5+v6+v7+v8+v9+v10, data=data_apple)
+R2[10] = summary(model)$r.squared
+SSE[10] = sum(summary(model)$residuals^2)
+
+k = which.max(R2)
+k = which.min(SSE)
+
+
+model = lm(label~v1+v2+v3+v4+v5+v6+v7+v8+v9+v10, data=data_apple)
+summary(model)
+
+data_apple$predict = predict(model,data_apple)
+ggplot(data = data_apple) + geom_point(aes(x = label , y = predict),
+                                       size = 1 , color = "darkolivegreen3") +
+  geom_smooth(aes(x = label , y = predict), formula=y~x, colour = "slateblue4",
+              fill = "aquamarine") +
+  geom_abline(slope = 1, intercept = 0, color = "firebrick1",size =1)
+
+
+```
+
+
+```{r fig8, fig.height = 8, fig.width = 16, fig.align = "center"}
+train = data_apple[1:round(0.8*nrow(data_apple)),]
+test = data_apple[(round(0.8*nrow(data_apple))+1):nrow(data_apple),]
+model = lm(label~v1+v2+v3+v4+v5+v6+v7+v8+v9+v10, data=train)
+summary(model)
+
+test$predict = predict(model,test)
+ggplot(data = test) + geom_point(aes(x = label , y = predict),
+                                 size = 1 , color = "darkolivegreen3") +
+  geom_smooth(aes(x = label , y = predict), formula=y~x, colour = "slateblue4",
+              fill = "aquamarine") +
+  geom_abline(slope = 1, intercept = 0, color = "firebrick1",size =1)
+
+residuals = sum((test$predict-test$label)^2)
+residuals
+```
+
+<p dir="RTL">
+به نظر می رشد که مدل نسبتا مناسب قیمت ها را پیش بینی می کند.
+</p>
+***
+
+<p dir="RTL">
+۵. بر روی داده های قیمت شروع شرکت ها الگوریتم pca را اعمال کنید. نمودار تجمعی درصد واریانس بیان شده در مولفه ها را رسم کنید. سه مولفه اول چند درصد از واریانس را تبیین می کند؟
+</p>
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+```{r fig9, fig.height = 8, fig.width = 16, fig.align = "center"}
+textpath = list.files("F:/University/8th Semester/Data Analysis/Class/Week 9/class_data/stock_dfs/",
+                      full.names = T)
+name = list.files("F:/University/8th Semester/Data Analysis/Class/Week 9/class_data/stock_dfs/") %>% 
+  str_replace(".csv","")
+
+x = read_csv(textpath[1])
+data_open = x %>% select(Date,Open)
+colnames(data_open) = c("Date",name[1])
+for (i in 2:length(textpath)){
+  x = read_csv(textpath[i]) %>% select(Date,Open)
+  colnames(x) = c("Date",name[i])
+  data_open <- merge(data_open,x)                
+}
+
+pca = prcomp(t(as.matrix(data_open %>% select(-Date))), center=T, scale.=T)
+plot(summary(pca)$importance[3,]*100, type="l",
+     ylab="%variance explained", xlab="nth component (decreasing order)")
+abline(h=summary(pca)$importance[3,3]*100,col="red");abline(v = 3,col="red",lty=3)
+
+
+
+```
+
+<p dir="RTL">
+مشاهده می شود که چون تعداد سطرهای داده از تعداد ستون های آن کمتر است روی بعد کمتر pca اعمال شده است و لذا نتایج قابل استناد نیستند. در زیر سعی کردم که با حذف نکردن تاریخ هایی که بعضی شرکت ها داده نداشتند، داده ی دیگری بسازم و pca را روی آن اعمال کنم که متاسفانه مشاهده شد تعداد زیادی از شرکت ها در تعاد زیادی روز داده ندارند و لذا این کار مناسب نخواهد بود.
+</p>
+
+```{r}
+data_o = data %>% select(Date,company,Open) %>% spread(company,Open)
+```
+
+
+***
+
+<p dir="RTL">
+۶. برای هر نماد اطلاعات بخش مربوطه را از داده constituents استخراج نمایید. برای هر بخش میانگین روزانه قیمت شروع شرکت های آن را محاسبه کنید. سپس با استفاده از میانگین به دست آمده  داده ایی با چند ستون که هر ستون یک بخش و هر سطر یک روز هست بسازید. داده مربوط را با داده شاخص های اقتصادی ادغام کنید. بر روی این داده pca بزنید و نمودار biplot آن را تفسیر کنید.
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+```{r fig10, fig.height = 8, fig.width = 16, fig.align = "center"}
+data %>% select(Date,company,Open) -> data_sector
+
+data_sector = 
+  addNewData("F:/University/8th Semester/Data Analysis/HWs/hw_09/dictionary.csv",
+             data_sector , allowedVars) %>% filter(!is.na(sector))
+data_sector %>% group_by(Date,sector) %>% summarise(Open = mean(Open)) %>% spread(sector,Open) -> test
+test %>% .[,-1] %>% as.data.frame() -> data_sector
+data_sector = cbind(as.data.frame(test$Date),data_sector)
+colnames(data_sector)[1] = "Date"
+
+indexes = read_csv("F:/University/8th Semester/Data Analysis/Class/Week 9/class_data/indexes.csv")
+data_sector = merge(data_sector,indexes)
+
+pca = prcomp(data_sector %>% select(-Date), center=T, scale.=T)
+biplot(pca,cex=0.7)
+```
+
+<p dir="RTL">
+مشاهده می شود که جهت بخش های Financials و Telecommunication Services ازجهت سایر بخش ها کاملا جدا شده ولی سایر بخش ها جهت هایشان بسیار نزدیک به هم است. به عبارت دیگر به نظر می رسد سود شرکت های این دوبخش در فضایی جدا از سایر بخش ها قرار دارد.
+</p>
+
+***
+
+<p dir="RTL">
+۷. روی همه اطلاعات (OHLCV) سهام اپل الگوریتم PCA را اعمال کنید. سپس از مولفه اول برای پیش بینی قیمت شروع سهام در روز آینده استفاده کنید. به سوالات سوال ۴ پاسخ دهید. آیا استفاده از مولفه اول نتیجه بهتری نسبت به داده open price برای پیش بینی قیمت دارد؟
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+```{r fig11, fig.height = 8, fig.width = 16, fig.align = "center"}
+pca = prcomp(apple %>% select(-Date), center = T, scale.= T)
+data_apple = data.frame(feature = pca$x[1:(nrow(apple)-1),1],label = apple$Open[2:nrow(apple)])
+model = lm(label~feature,data=data_apple)
+summary(model)
+
+data_apple$predict = predict(model,data_apple)
+ggplot(data = data_apple) + geom_point(aes(x = label , y = predict),
+                                       size = 1 , color = "darkolivegreen3") +
+  geom_smooth(aes(x = label , y = predict), formula=y~x, colour = "slateblue4",
+              fill = "aquamarine") +
+  geom_abline(slope = 1, intercept = 0, color = "firebrick1",size =1)
+
+
+```
+
+<p dir="RTL">
+برای بررسی دقیقتر مشابه سوال دو داده ها را به داده های آموزشی و تست تقسیم می کنیم و نتایج را روی داده های تست بررسی می کنیم.
+</p>
+
+```{r fig12, fig.height = 8, fig.width = 16, fig.align = "center"}
+train = data_apple[1:round(0.8*nrow(data_apple)),]
+test = data_apple[(round(0.8*nrow(data_apple))+1):nrow(data_apple),]
+model = lm(label~feature, data=train)
+summary(model)
+
+test$predict = predict(model,test)
+ggplot(data = test) + geom_point(aes(x = label , y = predict),
+                                 size = 1 , color = "darkolivegreen3") +
+  geom_smooth(aes(x = label , y = predict), formula=y~x, colour = "slateblue4",
+              fill = "aquamarine") +
+  geom_abline(slope = 1, intercept = 0, color = "firebrick1",size =1)
+
+residuals = sum((test$predict-test$label)^2)
+residuals
+```
+
+<p dir="RTL">
+با مقایسه ی نمودار و هم چنین SSE نسبت به مدل طراحی شده در سوال 4 می توان نتیجه گرفت که مدل طراحی شده در سوال 4 بهتر عمل می کند.
+</p>
+
+***
+
+<p dir="RTL">
+۸. نمودار سود نسبی شاخص s&p500 را رسم کنید. آیا توزیع سود نرمال است؟(از داده indexes استفاده کنید.)
+با استفاده از ده مولفه اول سوال پنج آیا می توانید سود و ضرر شاخص s&p500 را برای روز آينده پیش بینی کنید؟ از یک مدل رگرسیون لاجستیک استفاده کنید. درصد خطای پیش بینی را به دست آورید.
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+```{r}
+SP500_returns = indexes$SP500[2:nrow(indexes)]/indexes$SP500[1:nrow(indexes)-1] -1
+qqPlot(SP500_returns)
+```
+
+<p dir="RTL">
+از نمودار فوق می توان مشاهده کرد که سود شاخص S&P500 دم کلفت تر از توزیع نرمال است.
+
+با توجه به مشکلی که در داده های سوال 5 و pca مربوط به آن ها وجود داشت نمی توان به قسمت دوم سوال پاسخ داد.
+</p>
+
+***
+
+<p dir="RTL"> 
+۹. عکسی که در ابتدای متن آمده را در نظر بگیرید. با استفاده از pca عکس را فشرده کنید. سپس نمودار حجم عکس فشرده بر حسب تعداد مولفه اصلی را  رسم کنید. بهترین انتخاب برای انتخاب تعداد مولفه ها در جهت فشرده سازی چه عددی است؟
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+```{r fig13, fig.height = 8, fig.width = 16, fig.align = "center"}
+pic = flip(readImage("F:/University/8th Semester/Data Analysis/HWs/hw_09/hw_09/images/stock.jpg"))
+red.weigth   = .2989; green.weigth = .587; blue.weigth  = 0.114
+img = red.weigth * imageData(pic)[,,1] +
+  green.weigth * imageData(pic)[,,2] + blue.weigth  * imageData(pic)[,,3]
+image(img, col = grey(seq(0, 1, length = 256)))
+```
+
+```{r fig14, fig.height = 8, fig.width = 16, fig.align = "center"}
+pca.img = prcomp(img, scale=TRUE)
+which(summary(pca.img)$importance[3,]>=0.99)[1]
+plot(summary(pca.img)$importance[3,], type="l",
+     ylab="%variance explained", xlab="nth component (decreasing order)")
+abline(h=0.99,col="red");abline(v = 109,col="red",lty=3)
+```
+
+```{r fig15, fig.height = 8, fig.width = 16, fig.align = "center"}
+chosen.components = 1:109
+feature.vector = pca.img$rotation[,chosen.components]
+compact.data = t(feature.vector) %*% t(img)
+approx.img = t(feature.vector %*% compact.data) 
+
+image(approx.img, col = grey(seq(0, 1, length = 256)))
+```
+
+```{r fig16, fig.height = 8, fig.width = 16, fig.align = "center"}
+save_size = numeric(412)
+for (i in 1:412){
+  chosen.components = 1:i
+  feature.vector = pca.img$rotation[,chosen.components]
+  compact.data = t(feature.vector) %*% t(img)
+  approx.img = t(feature.vector %*% compact.data) 
+  save_size[i] = object.size(compact.data) + object.size(feature.vector)
+}
+
+
+save_size = data.frame(Number_of_PCA_Components = c(1:412), Save_Size=save_size)
+hchart(save_size,'line',hcaes(x = Number_of_PCA_Components , y = Save_Size))
+```
+
+<p dir="RTL">
+تعداد 109 مولفه 99درصد اطلاعات عکس را حفظ می کند و بهترین تعداد مولفه به نظر می رسد.
+</p>
+
+***
+
+<p dir="RTL"> 
+۱۰. پنج ایده جالبی که روی داده های مالی بالا می توانستیم پیاده کنیم را بیان کنید. (ایده کافی است نیازی به محاسبه بر روی داده نیست.)
+</p>
+
+<h3 dir="RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+1. پیدا کردن شرکت هایی که سودشان با هم correlation زیادی دارد.
+</p>
+
+<p dir="RTL">
+2. بررسی correlation شرکت های فوق در بازه های 60 روزه و به صورت windowing به منظور بررسی دقیقتر معناداری correlation بین آن ها
+</p>
+
+<p dir="RTL">
+3 و 4. بررسی دو ایده ی فوق برا بخش های مختلف به جای شرکت ها
+</p>
+
+<p dir="RTL">
+5. بررسی سوددهی شرکت ها و بخش های مختلف در طول بحران مالی 2008 و یافتن موفقترین آن ها در این بازه
+</p>
+
+
