@@ -1,0 +1,500 @@
+---
+title: "Association rules"
+subtitle: "Movie recommender systems"
+author: "مهسا خوش نما 93101481"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F)
+options(width = 80)
+```
+<div align="center">
+<img  src="images/rs_cover.jpg"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با استفاده از داده نظرهای فیلم به سوالات زیر پاسخ دهید.
+</p>
+
+```{r}
+library(readr)
+library(stringr)
+library(tidyr)
+library(highcharter)
+library(Hmisc)
+library(dplyr)
+library(corrplot)
+library(car)
+library(tidytext)
+library(wordcloud)
+library(tm)
+library(colorspace)
+library(knitr)
+library(kableExtra)
+
+movie = read_delim("F:/University/8th Semester/Data Analysis/Class/Week 12/ml-10m/ml-10M100K/movies.dat",
+                   delim = "::",col_names = c("MovieID",NA,"Title",NA,"Genres"))
+movie = movie %>% select(1,3,5)
+
+rating = read_delim("F:/University/8th Semester/Data Analysis/Class/Week 12/ml-10m/ml-10M100K/ratings.dat",
+                    delim = "::",col_names = c("UserID",NA,"MovieID",NA,"Rating",NA,"Timestamp"))
+rating = rating %>% select(1,3,5,7)
+```
+
+
+***
+
+<p dir="RTL">
+۱. آماره های زیر را بیابید.
+الف. محبوب ترین فیلم کدام است؟
+ب. بیشترین نظرات درباره چه فیلمی داده شده است؟
+پ. منفورترین فیلم کدام است؟
+ت. تعداد فیلم های ساخته شده در هر سال
+ث. در هر سالی مردم به چه ژانری علاقه مند بوده اند.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+ده فیلم برتر به ترتیب محبوبیت: (در این قسمت علاوه بر فاکتور میانگین امتیاز، مقدار مینیمم 10000 نظر ثبت شده برای فیلم هم در نظر گرفته شده است.)
+</p>
+```{r}
+##Part A:
+movie %>% mutate(Year = str_extract(Title,"\\d{4}")) -> movie
+rating %>% group_by(MovieID) %>% summarise(rate_count = n(),rate = mean(Rating)) %>% 
+  merge(movie) -> movie
+
+movie %>% filter(rate_count>=10000) %>% arrange(-rate) %>% slice(1:10) -> best_movies
+kable(best_movies)
+```
+<p dir="RTL">
+ده فیلم اول به ترتیب تعداد نظرات:
+</p>
+
+```{r}
+##Part B:
+movie %>% arrange(-rate_count) %>% slice(1:10) -> most_rates
+kable(most_rates)
+```
+
+<p dir="RTL">
+ده فیلم منفور به ترتیب: ( در این قسمت هم علاوه بر معیار میانگین امتیاز، مینیمم تعداد نظر ثبت شده را 5000 در نظر گرفتیم)
+</p>
+```{r}
+##Part C:
+movie %>% filter(rate_count>=1000) %>% arrange(rate) %>% slice(1:10) -> worst_movies
+kable(worst_movies)
+```
+
+<p dir="RTL">
+ده سال اول به ترتیب تعداد فیلم ساخته شده:
+</p>
+
+```{r}
+##Part D:
+movie %>% group_by(Year) %>% summarize(num_movies = n()) %>% filter(!is.na(Year))-> num_movies
+kable(num_movies %>% arrange(-num_movies) %>% head(10))
+```
+
+```{r}
+#Part E:
+genres = str_split(movie$Genres,"\\|") %>% unlist() %>% unique()
+genres = genres[1:20]
+genres = genres[!is.na(genres)]
+
+rating = rating %>% mutate(Year = movie$Year[match(MovieID,movie$MovieID)],
+                           Genres= movie$Genres[match(MovieID,movie$MovieID)])
+
+
+for (i in 1:length(genres)){
+  rating %>% mutate(genre = str_detect(Genres,genres[[i]])) -> rating
+  colnames(rating)[6+i] = genres[i]
+}
+
+Genre_ratings = data.frame(Year = c(),genre = c(),mean_rate = c())
+rating %>% filter(!is.na(Genres)) %>% filter(!is.na(Year))-> rating_genres
+for (i in 1:length(genres)){
+  count = rating_genres[rating_genres[,genres[i]]==T,] %>% group_by(Year) %>%
+    summarise(mean_rate=mean(Rating)) %>% mutate(genre = genres[i]) %>% select(Year,genre,mean_rate)
+  Genre_ratings = rbind(Genre_ratings,count)
+}
+
+
+Genre_ratings %>% filter(Year>=1900 & Year<=2010) %>% arrange(desc(mean_rate)) %>% group_by(Year) %>%
+  top_n(1) -> Genre_ratings
+Genre_ratings %>% arrange(desc(Year)) -> Genre_ratings
+
+Genre_ratings
+kable(Genre_ratings) %>%  kable_styling() %>%
+  scroll_box(width = "900px", height = "600px")
+```
+
+
+***
+
+<p dir="RTL">
+۲. ژانر فیلم ها را استخراج نمایید.  سپس آماره های زیر را استخراج نمایید.
+الف. نمودار ستونی تعداد فیلم های هر ژانر
+ب. نمودار همبستگی ژانرها
+پ. متوسط امتیاز به هر ژانر
+ت. دوران طلایی فیلم سازی 
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r fig1, fig.height = 8, fig.width = 16, fig.align = "center"}
+##Part A:
+for (i in 1:length(genres)){
+  movie %>% mutate(genre = str_detect(Genres,genres[[i]])) -> movie
+  colnames(movie)[6+i] = genres[i]
+}
+movie_genres = movie %>% filter(!is.na(Genres))
+
+genre_counts = data.frame(genre=c(),count=c())
+for (i in 1:length(genres)){
+  count = movie_genres[movie_genres[,genres[i]]==T,] %>% nrow()
+  genre_counts = rbind(genre_counts,data.frame(genre=c(genres[i]),count= c(count)))
+}
+
+genre_counts %>% arrange(-count) -> genre_counts
+hchart(genre_counts,type = 'column',hcaes(x = genre,y=count,color = -count), name='number of t') %>%
+  hc_add_theme(hc_theme_google()) %>% hc_title(text="Number of Movies of Each Genre")
+
+```
+
+
+```{r fig2, fig.height = 8, fig.width = 16, fig.align = "center"}
+##Part B:
+library(car)
+for (i in 1:length(genres)){
+  movie_genres[,genres[[i]]] = recode(movie_genres[,genres[[i]]],"TRUE=1;FALSE=0")
+}
+stat = movie_genres[,7:ncol(movie_genres)]
+corr = rcorr(as.matrix(stat))
+corr_matrix = corr[[1]]
+corrplot(corr_matrix)
+```
+
+```{r}
+##Part C:
+Genre_ratings = data.frame(genre = c(),mean_rate = c())
+for (i in 1:length(genres)){
+  count = rating_genres[rating_genres[,genres[i]]==T,]
+  Genre_ratings = rbind(Genre_ratings,data.frame(genre = c(genres[[i]]),mean_rate = mean(count$Rating)))
+}
+
+Genre_ratings %>% arrange(-mean_rate) -> Genre_ratings
+kable(Genre_ratings) %>%  kable_styling() %>%
+  scroll_box(width = "900px", height = "600px")
+
+```
+
+
+```{r}
+##Part D:
+rating %>% filter(!is.na(Year)) %>% group_by(Year) %>% summarise(mean_rate = mean(Rating)) %>% 
+  arrange(-mean_rate) %>% head(10) -> Year_Ratings
+kable(Year_Ratings)
+
+```
+
+***
+
+<p dir="RTL">
+۳. نمودار ابر لغات را بر حسب کلمات عنوان فیلم ها رسم نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+words = data.frame(word = movie$Title %>% str_replace_all("[:punct:]"," ") %>% 
+                     str_replace_all("[:digit:]"," ") %>% str_split("\\s+") %>% unlist(),
+                   stringsAsFactors = F)
+words  %>%  filter(!str_to_lower(word) %in% stop_words$word) %>% 
+  filter(!(str_to_lower(word) %in% stopwords('fr'))) %>% 
+  filter(str_length(word)>1) %>% mutate(word2 = str_to_lower(word)) %>% 
+  filter(!(word2 %in% c("i","ii","iii"))) %>% 
+  group_by(word2) %>% summarise(count = n()) %>% arrange(-count) -> words
+
+wordcloud(words$word2,words$count,size=0.1,
+          c(5,.3), random.order = FALSE, colors=brewer.pal(8, "Dark2"))
+
+```
+
+
+***
+
+<p dir="RTL">
+۴. با استفاده از قوانین همبستگی یک توصیه گر برای فیلم ها بسازید. شبیه ترین فیلم ها به لیست زیر را پیدا کنید.
+</p>
+
+* Castle in the Sky (1986)
+* Cast Away (2000)
+* No Country for Old Men (2007)
+* Memento (2000)
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+setwd("F:/University/8th Semester/Data Analysis/HWs/hw_12")
+library(arules)
+
+df_rating = rating %>% filter(Rating>=3) %>%  select(UserID,MovieID)
+df_rating = df_rating %>% mutate(title = paste("movie",as.character(MovieID),
+                                               movie$Title[match(MovieID,movie$MovieID)]))
+
+df_rating = df_rating %>% select(UserID,title)
+write.csv(df_rating, "transactions.csv")
+
+transactions <- read.transactions(
+  file = "transactions.csv",
+  format = "single",
+  sep = ",",
+  cols=c("UserID","title"),
+  rm.duplicates = T
+)
+
+ID1 = paste("movie",as.character(movie$MovieID[str_detect(movie$Title,"Castle in the Sky")]),
+            movie$Title[str_detect(movie$Title,"Castle in the Sky")])
+ID2 = paste("movie",as.character(movie$MovieID[str_detect(movie$Title,"Cast Away")]),
+            movie$Title[str_detect(movie$Title,"Cast Away")])
+ID3 = paste("movie",as.character(movie$MovieID[str_detect(movie$Title,"No Country for Old Men")]),
+            movie$Title[str_detect(movie$Title,"No Country for Old Men")])
+ID4 = paste("movie",as.character(movie$MovieID[str_detect(movie$Title,"Memento")]),
+            movie$Title[str_detect(movie$Title,"Memento")])
+
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 5,maxlen=5),
+                 appearance = list(lhs=c(ID1,ID2,ID3,ID4), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+<p dir="RTL">
+مشاهده می شود که با پارامترهای فوق هیچ فیلمی پیشنهاد نمی شود. با تغییر پارامترهای فوق و کم کردن آن ها هم تغیری مشاهده نمی شود. یکی از دلایل این مساله می تواند تعداد کم کاربرانی باشد که فیلم سوم در لیست فیلم های آن هاست. (فقط 6کاربر). حال به جای لیست فوق به صورت کامل، زیرمجموعه های 3 عضوی و دوعضوی آن را بررسی می کنیم و می بینیم برای آن ها چه قواعدی وجود دارد.
+</p>
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 4,maxlen=4),
+                 appearance = list(lhs=c(ID1,ID2,ID3), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 4,maxlen=4),
+                 appearance = list(lhs=c(ID1,ID2,ID4), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 4,maxlen=4),
+                 appearance = list(lhs=c(ID1,ID3,ID4), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 4,maxlen=4),
+                 appearance = list(lhs=c(ID2,ID3,ID4), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 3,maxlen=3),
+                 appearance = list(lhs=c(ID1,ID2), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 3,maxlen=3),
+                 appearance = list(lhs=c(ID1,ID3), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 3,maxlen=3),
+                 appearance = list(lhs=c(ID1,ID4), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 3,maxlen=3),
+                 appearance = list(lhs=c(ID2,ID3), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+```{r}
+rules <- apriori(transactions,parameter = list(support = 0.009,confidence = 0.25,maxtime = 0,
+                                               minlen = 3,maxlen=3),
+                 appearance = list(lhs=c(ID2,ID4), 
+                                   default="rhs"))
+
+inspect(rules)
+```
+
+
+***
+
+<p dir="RTL">
+۵. تمرین سخت: در گیت هاب برای خود اکانت درست کنید. همه تمرین های خود را آنجا بارگذاری کنید! و لینک آن را ارسال نمایید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p>
+https://github.com/mahsa-khoshnama/Data-Analysis-Homeworks
+</p>
+
+***
+
+<p dir="RTL">
+۶. پنج انتقاد از درس و نحوه تدریس را بیان کنید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+روند پیشرفت درس یکنواخت نبود و در ابتدا سرعت درس کم بود ولی به تدریج بهتر شد.
+</p>
+
+<p dir="RTL">
+به نظر بنده، ساعت کلاس برای این درس مناسب نبود و زود بود.
+</p>
+
+
+<p dir="RTL">
+مباحث تئوری قوی مطرح نشدند و به تبع آن تحلیل های پیشرفته تر هم تدریس نشدند.
+</p>
+
+<p dir="RTL">
+تمرین اول درس به نظر اصلا مرتبط بادرس نبود.
+</p>
+
+<p dir="RTL">
+بعضی از تمارین مقدار زیادی ابهام داشتند.
+</p>
+
+
+***
+
+<p dir="RTL">
+۷. پنج پیشنهاد برای بهتر شدن درس بیان کنید.
+</p>
+
+
+<p dir="RTL">
+بهتر است از ابتدا روند درس سریعتر باشد تا فرصت پوشش مطالب بیتشری فراهم شود.
+</p>
+
+<p dir="RTL">
+ برای این درس که تعداد متقاضی زیادی هم دارد به نظر ساعت 10ونیم تا 12ونیم مناسبتر است. همان طور که مشاهده می شد در اواخر ترم حضور در کلاس کاهش یافته بود و بنده حدس میزنم به دلیل مشغله های زیاد دانشجویان در اواخر ترم اکثرا تا دیروقت بیدار هستند و کلاس های اول صبح را حاضر نمی شوند.
+</p>
+
+<p dir="RTL">
+ مباحث تئوری قوی تر و تحلیل های پیشرفته تری تدریس شوند.
+</p>
+
+<p dir="RTL">
+ تمارین از ابتدا مرتبط با موضوع درس طرح شوند.
+</p>
+
+<p dir="RTL">
+ صورت سوالات تمارین واضح تر و شفاف تر باشند.
+</p>
+
+
+
+
+
+***
+
+<p dir="RTL">
+۸. سه موضوع آماری جدید برای جایگزینی در سرفصل ها پیشنهاد دهید.
+</p>
+
+<p dir="RTL">
+سایر روش ها برای کاهش بعد داده ها و feature selection مانند SVD، backward/forward selection و ...
+</p>
+
+<p dir="RTL">
+سایر مدل های یادگیری ماشینی (علاوه بر رگرسیون خطی و لاجستیک) مانند SVM
+</p>
+
+<p dir="RTL">
+سایر روش های clustering مانند spectral clustering
+</p>
+
+
+***
+
+<p dir="RTL"> 
+۹. سه داده جالب برای کار در کلاس پیشنهاد دهید.
+</p>
+
+<p dir="RTL">
+داده های مصرف برق خانوارها، داده های سبد خرید مشتریان فروشگاه های بزرگ، داده های جرائم و خلاف ها (که تعداد زیادی از آن ها به صورت عمومی در بعضی ایالت های آمریکا منتشر می شوند مثلا جرائم ترافیکی و جریمه های آن ها)
+</p>
+
+***
+
+<p dir="RTL"> 
+۱۰. چهار نکته مهمی که در کلاس یاد گرفتید را بیان کنید.
+</p>
+
+<p dir="RTL">
+ تحلیل اکتشافی داده و گرفتن شهود نسبت به داده ها
+</p>
+
+<p dir="RTL">
+ به کارگیری آزمون فرض برای بررسی درستی مدل های به کار رفته
+</p>
+
+<p dir="RTL">
+ نحوه استخراج داده از صفحات وب
+</p>
+
+<p dir="RTL">
+4)</p>
+
+
