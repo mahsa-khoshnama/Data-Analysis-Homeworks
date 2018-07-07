@@ -1,0 +1,392 @@
+---
+title: "Create Map"
+subtitle: "Earthquake Analysis"
+author: "مهسا خوش نما 93101481"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, error = F)
+options(width = 80)
+```
+
+<div align="center">
+<img  src="images/eqs003-001-2.png"  align = 'center'>
+</div>
+
+> <p dir="RTL"> 
+با استفاده از داده های زلزله ها در ایران و جهان به سوالات زیر پاسخ دهید.
+</p>
+
+```{r}
+library(readr)
+library(dplyr)
+library(stringr)
+library(highcharter)
+library(ggmap)
+library(ggplot2)
+library(plotly)
+library(gganimate)
+library(ggthemes)
+library(knitr)
+library(kableExtra)
+```
+
+***
+
+<p dir="RTL">
+۱. با استفاده از داده های
+historical_web_data_26112015.rds 
+و استفاده از نمودار پراکنش سه بعدی بسته plotly نمودار طول، عرض و عمق زلزله ها را رسم نمایید. علاوه بر آن بزرگی هر نقطه را برابر بزرگی زمین لرزه قرار دهید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r fig1, fig.height = 8, fig.width = 8, fig.align = "center" }
+historical_equake = read_rds("F:/University/8th Semester/Data Analysis/Class/Week 11/week_11/data/historical_web_data_26112015.rds")
+plot_ly(data = historical_equake, type = "scatter3d", x =~Longitude , y =~Latitude,
+        z =~Depth,size =~Magnitude, color = ~Magnitude)
+```
+
+***
+
+<p dir="RTL">
+۲. پویانمایی سونامی های تاریخی را بر حسب شدت بر روی نقشه زمین رسم نمایید.(از داده زلزله های بزرگ استفاده نمایید.)
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+disaster = read_delim("F:/University/8th Semester/Data Analysis/Class/Week 11/week_11/data/disaster.txt", "\t", escape_double = FALSE, trim_ws = TRUE)
+
+```
+
+```{r, eval=FALSE}
+tsunami = disaster %>% filter(FLAG_TSUNAMI=="Tsu")
+world = map_data("world")
+world = world[world$region!="Antarctica",]
+
+p = ggplot() +
+  geom_point(data=tsunami,aes(x=LONGITUDE,y=LATITUDE, frame = YEAR,
+                             cumulative = TRUE, size = EQ_PRIMARY),alpha = 0.3,
+             color = "#336600") +
+  geom_polygon(data=world,aes(x=long,y=lat,group=group),fill = 'yellow', color = 'lightblue') + coord_fixed(2.5/3)
+
+gganimate(p,filename = "F:/University/8th Semester/Data Analysis/HWs/hw_11/tsunami.gif")
+
+```
+
+<div align="center">
+<img  src="tsunami.gif" width="500" height="600"  align = 'center'>
+</div>
+***
+
+<p dir="RTL">
+۳. نمودار چگالی دو بعدی زلزله های تاریخی ایران را رسم کنید.( از داده iran_earthquake.rds و لایه stat_density_2d استفاده نمایید).
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r fig2, fig.height = 8, fig.width = 8, fig.align = "center"}
+iran_equake = read_rds("F:/University/8th Semester/Data Analysis/Class/Week 11/week_11/data/iran_earthquake.rds")
+iran_equake_hist <- iran_equake %>% filter(Mag>4)
+myMap = get_map("Iran",zoom = 6)
+ggmap(myMap)+
+  geom_point(aes(x = Long, y = Lat), data = iran_equake_hist,
+             alpha = .5, color="darkred", size = 0.2) +  stat_density_2d()
+```
+
+
+***
+
+<p dir="RTL">
+۴. احتمال اینکه در ایران در پنج سال آینده زلزله به بزرگی هفت ریشتر رخ دهد را محاسبه کنید. (از احتمال شرطی استفاده کنید.)
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+به دو روش این کار را انجام می دهیم.روش اول که روش ابتدایی تری نسبت به روش دوم است به این صورت است: برای تمام سال ها در داده ی زلزله های بزرگ، بررسی می کنیم که در 50 سال گذشته یشان چند زلزله ی بزرگتر از 7ریشتر اتفاق افتاده و نیز در 5 سال آینده یشان. حال برای سال 2018 در 50 ال گذشته اش 8 زلزله ی بزرگتر از 7 ریشتر اتفاق افتاده است. بنابرابن در سال های گذشته بررسی می کنیم که در چه تعداد از سال ها در 50 سال قبلشان تعداد 6الی 10 زلزله ی بزرگتر از 7 ریشتر اتفاق افتاده است (یک بازه ی متفارن حول 8) و نسبت تعدادی از آن ها که در 5سال بعدشان حداقل یک زلزله ی بزرگتر از 7ریشتر آمده است را به عنوان احتمال زلزله در 5 سال آینده اعلام می کنیم.
+</p>
+
+```{r}
+iran_disaster = disaster %>% filter(COUNTRY == "IRAN") %>% group_by(YEAR) %>%
+  summarize(equake_count7 = sum(!is.na(EQ_PRIMARY) & EQ_PRIMARY>=7))
+iran_disaster2 = iran_disaster %>% select(year = YEAR) %>% mutate(equake50 = 0,equake5 = 0)
+i = 1
+for (year in iran_disaster2$year){
+  iran_disaster2$equake50[i] = sum(iran_disaster$equake_count7[
+                                     which(iran_disaster$YEAR>=(year-50) & 
+                                             iran_disaster$YEAR<=year )])
+  iran_disaster2$equake5[i] = sum(iran_disaster$equake_count7[
+                                    which(iran_disaster$YEAR<=(year+5) & 
+                                          iran_disaster$YEAR>year )])
+  i = i+1
+}
+iran_disaster2 %>% tail()
+
+iran_disaster2 %>% filter(equake50 %in% 6:10) %>% summarise(p = sum(equake5>0)/n())
+```
+
+<p dir="RTL">
+در روش دوم، فرض می کنیم که زلزله های بزرگتر از 7ریشتر توزیع احتمالی پواسون و در نتیجه فواصل زمانی آن ها توزیع نمایی دارد. در ضمن با توجه به این که به نظر می رسد داده ها برای سال های قبل از 1850 کام نباشد، داده های از این سال به بعد را در نظر گرفته و یک تخمین ML برای پارامتر توزیع نمایی فاصله ی بین زلزل های بزرگتر از 7ریشتر پیدا می کنیم. (تخمین ML برای پارامتر توزیع نمایی متغیر $X$ برابر $n/\sum_{i=1}^n x_n$ است.)سپس با استفاده از آن احتمال وقوع یک زلزله ی بزرگتر از 7 ریشتر در 5سال آینده را پیدا می کنیم (احتمال این که فاصله ی بین آخرین زلزله ی بزرگتر از 7ریشتر و زلزله ی بعدی کمتر مساوی 5 سال به اضافه ی فاصله ی زمانی اموز تا آخرین زلزله ی قبلی باشد):
+</p>
+
+```{r}
+iran_disaster = disaster %>% filter(COUNTRY == "IRAN") %>% filter(EQ_PRIMARY>=7)
+iran_disaster = iran_disaster %>% filter(YEAR>=1850) %>% arrange(YEAR)
+year_diff = diff(iran_disaster$YEAR) + diff(iran_disaster$MONTH)/12 + diff(iran_disaster$DAY)/365
+lambda_ML = length(year_diff)/sum(year_diff)
+year = 2018 + 6/12 + 18/365 - tail(iran_disaster,1)$YEAR - 
+          tail(iran_disaster,1)$MONTH/12 - tail(iran_disaster,1)$DAY/365
+p = (exp(-lambda_ML*year) - exp(-lambda_ML*(year+5)))/(exp(-lambda_ML*year))
+p
+```
+
+***
+
+<p dir="RTL">
+۵. بر اساس داده های زلزله های بزرگ ابتدا تعداد و متوسط کشته زلزله ها را بر حسب کشور استخراج نمایید. سپس نمودار گرمایی تعداد کشته ها را بر روی کره زمین رسم نمایید.(مانند مثال زیر!)
+</p>
+
+<div align="center">
+<img  src="images/jvector.png"  align = 'center'>
+</div>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r fig3, fig.height = 8, fig.width = 16, fig.align = "center"}
+disaster %>% mutate(death = ifelse(is.na(TOTAL_DEATHS),0,TOTAL_DEATHS)) -> disaster
+disaster %>% group_by(COUNTRY) %>% summarise(death_count = sum(death)) -> death
+death$COUNTRY = str_to_lower(death$COUNTRY)
+Map = map_data("world")
+Map = Map[Map$region!="Antarctica",]
+Map$region = str_to_lower(Map$region)
+Map %>% mutate(death_count = ifelse(is.na(match(region, death$COUNTRY)),0,
+                                    death$death_count[match(region, death$COUNTRY)])) -> Map
+ggplot() +
+  geom_polygon(data = Map, aes(x=long,y= lat, group = group, fill = death_count), color = "lightblue")+
+  
+  scale_fill_distiller(palette = "Spectral")
+```
+
+***
+
+<p dir="RTL">
+۶. با استفاده از داده لرزه های بزرگ و به وسیله طول، عرض، شدت، عمق مدلی برای پیش بینی تعداد کشته های زلزله بیابید.
+</p>
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+data = disaster %>% filter(!is.na(TOTAL_DEATHS)) %>% select(lat = LATITUDE, long = LONGITUDE, 
+                            depth = FOCAL_DEPTH, magnitude = EQ_PRIMARY,death = TOTAL_DEATHS)
+n = dim(data)[1]
+train_indices = 
+  sample(1:n, size = n*0.8, replace = FALSE, prob = NULL)
+test_indices = c(1:n)[-train_indices]
+
+
+fit = lm(death~ lat + long + depth + magnitude , data = data[train_indices,])
+
+summary(fit)
+
+data["PredictDeath"] = predict(fit,data)
+test = data[test_indices,] %>% filter(!is.na(PredictDeath))
+
+R2 = sum((test$PredictDeath - mean(test$death))^2)/
+  sum((test$death - mean(test$death))^2)
+
+Residual_standard_error = sqrt(mean((test$PredictDeath - test$death)^2))
+
+R2
+Residual_standard_error
+```
+
+
+***
+
+<p dir="RTL">
+۷. با استفاده از داده worldwide.csv به چند سوال زیر پاسخ دهید. تحقیق کنید آیا می توان از پیش لرزه، زلزله اصلی را پیش بینی کرد؟
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای پاسخ دادن به این سوال از داده ی worldwide.csv استفاده شده است که حاوی اطلاعات مورد نیاز برای بررسی پیش لرزه ها و زلزله های اصلی است.
+</p>
+
+<p dir="RTL">
+از لحاظ علمی، پیش لرزه تعریف دقیقی ندارد و فقط در طول زمان است که ثابت می شود زلزله ای پیش لرزه ی زلزله ی دیگری بوده است یا خیر. برای مثال ممکن است زلزله ای دو سال بعد از یک زلزله اتفاق بیفتد و زلزله شناسان با توجه به شرایط وقوع آن، زلزله ی اولیه را پس لرزه ی آن بدانند. اما ما برای بررسی نیاز داریم که معیاری تعریف کنیم. به این منظور ما جفت زلزله هایی را پیش لرزه و زلزله ی اصلی در نظر می گیریم که: در یک مکان جغرافیایی اتفاق افتاده باشند، بین آن ها کمتر از 90 روز فاصله باشد، زلزله ی اول حداقل 3 ریشتر باشد و زلزله ی دوم حداقل دو ریشتر بزرگتر از زلزله ی دوم باشد. با معیارهای فوق، تنها تعداد کمی جفت زلزله پیدا شد که برای آموزش مدل کافی نیست. لذا نمی توانیم مدلی بر اساس آن ها طراحی کنیم.
+</p>
+
+```{r}
+world_equake = read_csv("F:/University/8th Semester/Data Analysis/Class/Week 11/week_11/data/worldwide.csv")
+world_equake %>% filter(!is.na(place) & !is.na(time) & !is.na(mag)) %>% 
+  arrange(place,time) -> world_equake
+n = dim(world_equake)[1]
+label = (as.numeric(world_equake$time[2:n]-world_equake$time[1:(n-1)])/(24*3600)<=90)
+label2 = (world_equake$place[2:n]==world_equake$place[1:(n-1)])
+label3 = (world_equake$mag[2:n]-world_equake$mag[1:(n-1)])>=2
+label4 = world_equake$mag[1:(n-1)]>=3
+
+foreshock = (world_equake[1:(n-1),])[which(label&label2&label3&label4),]
+mainshock = (world_equake[2:n,])[which(label&label2&label3&label4),]
+
+kable(foreshock) %>%  kable_styling() %>%
+  scroll_box(width = "900px", height = "600px")
+
+kable(mainshock) %>%  kable_styling() %>%
+  scroll_box(width = "900px", height = "600px")
+
+```
+
+
+***
+
+<p dir="RTL">
+۸. گزاره " آیا شدت زلزله به عمق آن بستگی دارد" را تحقیق کنید؟ (طبیعتا از آزمون فرض باید استفاده کنید.)
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL">
+برای بررسی از آزمون correlation بین عمق و شدت زلزله ها استفاده می کنیم:
+</p>
+
+```{r}
+world_equake = read_csv("F:/University/8th Semester/Data Analysis/Class/Week 11/week_11/data/worldwide.csv")
+world_equake %>% filter(!is.na(mag) & !is.na(depth)) %>% select(mag,depth) -> equake_test
+cor.test(equake_test$depth,equake_test$mag, method = "spearman")
+```
+
+<p dir="RTL">
+با توجه به این که مقدار pvalue، significant نیست نمی توان گفت که ارتباط خاصی بین شدت و عمق زلزله وجود دارد.
+</p>
+***
+
+<p dir="RTL"> 
+۹. میانگین سالانه زلزله ها را بر حسب کشور به دست آورید. آیا میتوان دلیلی در تایید یا رد تئوری هارپ ارائه کرد.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+```{r}
+
+disaster %>% group_by(COUNTRY,YEAR) %>% summarise(mean_mag = mean(EQ_PRIMARY,na.rm = T)) -> countries
+
+```
+
+<p dir="RTL"> 
+برای بررسی تئوری هارپ، میانگین شدت زلزله در کشورهای مختلف از سال 1700 تا 1993 (سال تاسیس تاسیسات هارپ) و از 1993 به بعد را به دست می آوریم و با استفاده از آزمون wilcox و هم چنین t-test به صورت paired بررسی می کنیم که آیا شدت زلزله ها پس از شروع پروژه ی هارپ افزایش پیدا کرده است یا خیر.
+</p>
+
+```{r}
+merge(disaster %>% filter(YEAR>=1993) %>% group_by(COUNTRY) %>% 
+        summarise(mean_mag_after = mean(EQ_PRIMARY,na.rm = T)),
+disaster %>% filter(YEAR>=1700 & YEAR<1993) %>% group_by(COUNTRY) %>% 
+  summarise(mean_mag_before = mean(EQ_PRIMARY,na.rm = T))) -> haarp
+
+wilcox.test(haarp$mean_mag_before,haarp$mean_mag_after,
+            alternative = "greater", paired = T)
+t.test(haarp$mean_mag_before,haarp$mean_mag_after,
+       alternative = "greater", paired = T)
+```
+
+<p dir="RTL"> 
+با توجه به این که مقدار pvalueهای به دست آمده از هر دو تست پارامتری و غیر پارامتری، significant است فرض صفر که در واقع همان تئوری هارپ بود رد می شود و میانگین شدت زلزله ها در سال های بعد از پروژه ی هارپ افزایش نیافته است.
+</p>
+
+***
+
+<p dir="RTL"> 
+۱۰. سه حقیقت جالب در مورد زلزله بیابید.
+</p>
+
+<h3 dir = "RTL">
+پاسخ:
+</h3>
+
+<p dir="RTL"> 
+1: بررسی می کنیم کدام مناطق بیشترین میانگین شدت زلزله را در طول مدتی که از زلزله ها داده داریم، داشته اند و همچنین رتبه ی ایران را در بین کشورها پیدا می کنیم:
+</p>
+
+```{r}
+disaster %>% group_by(COUNTRY) %>% summarise(mean_mag = mean(EQ_PRIMARY,na.rm = T)) %>% 
+  arrange(-mean_mag) %>% mutate(rank = as.numeric(rank(-mean_mag))) -> countries
+kable(countries %>% head(10))
+kable(countries %>% filter(str_detect(COUNTRY,"IRAN")))
+```
+
+
+<p dir="RTL"> 
+2: با استفاده از دو آزمون فرض پارامتری و غیر پارامتری t-test و wilcox بررسی می کنیم که آیا تعداد کشته های زلزله های بزرگی که در نیمه شب(منظور زمانی است که اکثر جمعیت خواب هستند مثلا از ساعت 11 شب تا 6 صبح) اتفاق افتاده اند از تعداد کشته های زلزله های بزرگی که در روز اتفاق افتاده اند بیشتر است یا خیر
+</p>
+```{r}
+disaster %>% filter(!is.na(TOTAL_DEATHS) & !is.na(HOUR)) %>% arrange(-TOTAL_DEATHS) %>% 
+  select(YEAR,MONTH,DAY,HOUR,LOCATION_NAME,EQ_PRIMARY,TOTAL_DEATHS) -> disaster_time
+
+
+wilcox.test(disaster_time %>% filter(HOUR<=6 | HOUR>=23) %>% .$TOTAL_DEATHS,
+            disaster_time %>% filter(HOUR>=7 & HOUR<=22) %>% .$TOTAL_DEATHS,
+            alternative = "less")
+t.test(disaster_time %>% filter(HOUR<=6 | HOUR>=23) %>% .$TOTAL_DEATHS,
+       disaster_time %>% filter(HOUR>=7 & HOUR<=22) %>% .$TOTAL_DEATHS,
+       alternative = "less")
+
+```
+
+<p dir="RTL"> 
+با توجه به این که مقدار pvalueهای به دست آمده significant نیست، می توان گفت که درستی گزاره فوق رد نمی شود. حال، برای بررسی دقیقتر بهتر است به این نکته توجه کنیم که دلیل این مساله شاید این باشد که در شب زلزله های بزرگتری رخ داده اند. این بار هم برای بررسی این مطلب از آزمون فرض کمک می گیریم:
+</p>
+
+```{r}
+wilcox.test(disaster_time %>% filter(HOUR<=6 | HOUR>=23) %>% .$EQ_PRIMARY,
+            disaster_time %>% filter(HOUR>=7 & HOUR<=22) %>% .$EQ_PRIMARY,
+            alternative = "less")
+t.test(disaster_time %>% filter(HOUR<=6 | HOUR>=23) %>% .$EQ_PRIMARY,
+       disaster_time %>% filter(HOUR>=7 & HOUR<=22) %>% .$EQ_PRIMARY,
+       alternative = "less")
+```
+<p dir="RTL"> 
+مجددا چون مقدار pvalueهای به دست آمده significant نیست نمی توان درستی گزاره را رد کرد و در واقع ممکن است تعداد کشته های بیشتر در زلزله های در طول شب به دلیل این باشد که در طول شب زلزله های بزرگتری آمده است.
+</p>
+
+<p dir="RTL">
+3: یک فرضیه ی علمی وجود دارد که تعداد زلزله ها و بزرگی شان به صورت نمایی رابطه ی عکس دارند، به طور دقیق تر مثلا بعد از این که در یک منطقه 10 بار زلزله ی 6 ریشتری می آید  باید منتظر یک زلزله ی 7ریشتری باشیم، یا اگر 100 بار زلزله ی 5ریشتری آمده باید منتظر یک زلزله ی 7ریشتری باشیم. می خواهیم درستی این فرضیه را بررسی کنیم.
+</p>
+
+```{r}
+disaster %>% arrange(LOCATION_NAME,YEAR,MONTH,DAY,HOUR) -> disaster
+disaster %>% filter(EQ_PRIMARY <= 6.3 & EQ_PRIMARY >= 5.8) -> eq6
+```
+
+<p dir="RTL">
+با بررسی داده ی فوق، نمی توان 10 زلزله ی پشت سر هم حدود 6ریشتری دقیقا در یک مکان پیدا کرد.  برای بررسی، نیاز است که بدانیم هر زلزله مربوط به چه گسلی بوده است و اگر زلزله ها مربوط به یک گسل باشند و در یک مکان هم اتفاق نیفتاده باشند هم برای بررسی کافی است. با داشتن این اطلاعات، می توان گزاره ی فوق را بررسی کرد.
+</p>
+</p>
+
+
